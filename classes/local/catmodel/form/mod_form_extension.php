@@ -31,7 +31,6 @@ use MoodleQuickForm;
  */
 final class mod_form_extension implements
     catmodel_mod_form_modifier, catmodel_mod_form_validator, catmodel_mod_form_data_preprocessor {
-
     public const UNLIMITED_QUESTIONS_FALLBACK = 1000;
 
     /**
@@ -50,9 +49,7 @@ final class mod_form_extension implements
             $formelements = catquiz_handler::instance_form_definition($form);
 
             // At this point, we also apply the values we get from the template to the whole mform.
-
             catquiz_handler::set_data_after_definition($form);
-
         }
 
         // Remove some default form fields the sub-plugin does not use.

@@ -39,21 +39,31 @@ function adaptivequizcatmodel_catquiz_post_create_attempt_callback(stdClass $ada
         catquiz_handler::prepare_attempt_caches();
 }
 
+/**
+ * Callback to execute when a question answer is processed.
+ * @param stdClass $adaptivequiz
+ * @param cm_info $cm
+ * @param stdClass $attemptrecord
+ */
 function adaptivequizcatmodel_catquiz_attempt_finished_feedback(
-        stdClass $adaptivequiz,
-        cm_info $cm,
-        stdClass $attemptrecord
-    ): string {
-        return catquiz_handler::attempt_finished($adaptivequiz, $cm, $attemptrecord);
+    stdClass $adaptivequiz,
+    cm_info $cm,
+    stdClass $attemptrecord
+): string {
+    return catquiz_handler::attempt_finished($adaptivequiz, $cm, $attemptrecord);
 }
 
 /**
  * Callback to execute when a question answer is processed.
  *
  * Picked up by mod_adaptivequiz component only.
- *
+ * @param question_usage_by_activity $quba
  * @param stdClass $adaptivequiz
  * @param attempt $attempt
  */
-function adaptivequizcatmodel_catquiz_post_process_item_result_callback(stdClass $adaptivequiz, attempt $attempt): void {
+function adaptivequizcatmodel_catquiz_post_process_item_result_callback(
+    question_usage_by_activity $quba,
+    stdClass $adaptivequiz,
+    attempt $attempt
+): void {
 }
