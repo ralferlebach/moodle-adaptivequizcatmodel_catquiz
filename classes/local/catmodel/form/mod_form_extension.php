@@ -43,7 +43,7 @@ final class mod_form_extension implements
      * @return array
      */
     public function definition_after_data_callback(MoodleQuickForm $form): array {
-
+        $formelements = [];
         $data = $form->exportValues();
 
         if ($data['catmodel'] === 'catquiz') {
