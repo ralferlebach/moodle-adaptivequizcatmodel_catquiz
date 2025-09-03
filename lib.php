@@ -42,12 +42,12 @@ function adaptivequizcatmodel_catquiz_post_create_attempt_callback(stdClass $ada
 /**
  * Callback to execute when a question answer is processed.
  * @param stdClass $adaptivequiz
- * @param cm_info $cm
+ * @param mixed $cm
  * @param stdClass $attemptrecord
  */
 function adaptivequizcatmodel_catquiz_attempt_finished_feedback(
     stdClass $adaptivequiz,
-    cm_info $cm,
+    mixed $cm,
     stdClass $attemptrecord
 ): string {
     return catquiz_handler::attempt_finished($adaptivequiz, $cm, $attemptrecord);
