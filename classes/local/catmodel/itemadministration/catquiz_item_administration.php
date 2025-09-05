@@ -14,17 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace adaptivequizcatmodel_catquiz\local\catmodel\itemadministration;
+namespace adaptivequizcatmodel_catquiz\local\catmodel\local\itemadministration;
 
 use local_catquiz\catquiz_handler;
-use mod_adaptivequiz\local\attempt\attempt;
+use mod_adaptivequiz\local\attempt;
 use mod_adaptivequiz\local\itemadministration\item_administration;
 use mod_adaptivequiz\local\itemadministration\item_administration_evaluation;
 use mod_adaptivequiz\local\itemadministration\next_item;
-use mod_adaptivequiz\local\question\question_answer_evaluation;
-use mod_adaptivequiz\local\question\question_answer_evaluation_result;
-use question_bank;
-use question_engine;
+use adaptivequizcatmodel_catquiz\local\catmodel\local\question\question_answer_evaluation;
 use question_usage_by_activity;
 use stdClass;
 
@@ -36,7 +33,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class catquiz_item_administration implements item_administration {
-
     /**
      * @var question_usage_by_activity $quba
      */
@@ -52,6 +48,9 @@ final class catquiz_item_administration implements item_administration {
      */
     private $adaptivequiz;
 
+    /**
+     * @var attempt $attempt
+     */
     private attempt $attempt;
 
     /**
@@ -64,7 +63,8 @@ final class catquiz_item_administration implements item_administration {
         question_usage_by_activity $quba,
         question_answer_evaluation $questionanswerevaluation,
         stdClass $adaptivequiz,
-        attempt $attempt) {
+        attempt $attempt
+    ) {
         $this->quba = $quba;
         $this->questionanswerevaluation = $questionanswerevaluation;
         $this->adaptivequiz = $adaptivequiz;
@@ -84,7 +84,7 @@ final class catquiz_item_administration implements item_administration {
         [$questionid, $errormessage] = catquiz_handler::fetch_question_id(
             $this->adaptivequiz->id,
             'mod_adaptivequiz',
-            $this->attempt->read_attempt_data()
+            $this->attempt->get_attempt()
         );
         // This means no answer has been given yet, it's a fresh attempt.
         if (is_null($previousquestionslot)) {

@@ -23,7 +23,7 @@
  */
 
 use local_catquiz\catquiz_handler;
-use mod_adaptivequiz\local\attempt\attempt;
+use mod_adaptivequiz\local\attempt;
 use mod_adaptivequiz\local\attempt\cat_model_params;
 
 /**

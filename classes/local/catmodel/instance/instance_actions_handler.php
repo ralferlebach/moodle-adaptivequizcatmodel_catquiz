@@ -31,8 +31,10 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class instance_actions_handler implements
-    catmodel_add_instance_handler, catmodel_delete_instance_handler, catmodel_update_instance_handler {
-
+    catmodel_add_instance_handler,
+    catmodel_delete_instance_handler,
+    catmodel_update_instance_handler
+{
     /**
      * Implementation of {@see catmodel_add_instance_handler::add_instance_callback()}.
      *

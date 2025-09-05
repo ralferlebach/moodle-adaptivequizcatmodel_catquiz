@@ -14,12 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace adaptivequizcatmodel_catquiz\local\catmodel\itemadministration;
+namespace adaptivequizcatmodel_catquiz\local\catmodel\local\itemadministration;
 
-use mod_adaptivequiz\local\attempt\attempt;
-use mod_adaptivequiz\local\itemadministration\item_administration;
+use adaptivequizcatmodel_catquiz\local\catmodel\local\question\question_answer_evaluation;
 use mod_adaptivequiz\local\itemadministration\item_administration_factory;
-use mod_adaptivequiz\local\question\question_answer_evaluation;
+use mod_adaptivequiz\local\itemadministration\item_administration;
+use mod_adaptivequiz\local\attempt;
 use question_usage_by_activity;
 use stdClass;
 
@@ -31,7 +31,6 @@ use stdClass;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class catquiz_item_administration_factory implements item_administration_factory {
-
     /**
      * Implements the interface.
      *
@@ -45,6 +44,11 @@ final class catquiz_item_administration_factory implements item_administration_f
         attempt $attempt,
         stdClass $adaptivequiz
     ): item_administration {
-        return new catquiz_item_administration($quba, new question_answer_evaluation($quba), $adaptivequiz, $attempt);
+        return new catquiz_item_administration(
+            $quba,
+            new question_answer_evaluation($quba),
+            $adaptivequiz,
+            $attempt
+        );
     }
 }
