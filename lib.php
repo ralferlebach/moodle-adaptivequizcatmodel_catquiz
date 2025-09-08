@@ -23,8 +23,8 @@
  */
 
 use local_catquiz\catquiz_handler;
+use local_catquiz\local\attempt\cat_model_params;
 use mod_adaptivequiz\local\attempt;
-use mod_adaptivequiz\local\attempt\cat_model_params;
 
 /**
  * Callback to execute when a fresh attempt on adaptive quiz has been created.

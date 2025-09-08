@@ -21,7 +21,7 @@ use mod_adaptivequiz\local\attempt;
 use mod_adaptivequiz\local\itemadministration\item_administration;
 use mod_adaptivequiz\local\itemadministration\item_administration_evaluation;
 use mod_adaptivequiz\local\itemadministration\next_item;
-use mod_adaptivequiz\local\question\question_answer_evaluation;
+use local_catquiz\local\question\question_answer_evaluation;
 use question_usage_by_activity;
 use stdClass;
 
