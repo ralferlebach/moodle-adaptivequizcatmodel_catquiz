@@ -46,6 +46,7 @@ final class mod_form_extension implements
         $data = $form->exportValues();
 
         if ($data['catmodel'] === 'catquiz') {
+            $this->move_catmodel_selector_block_above_grading($form);
             $formelements = catquiz_handler::instance_form_definition($form);
 
             // At this point, we also apply the values we get from the template to the whole mform.
@@ -78,6 +79,35 @@ final class mod_form_extension implements
         $formelements[] = $maxquestionselem;
 
         return $formelements;
+    }
+
+    /**
+     * Moves the CAT model selector block before grading fields.
+     *
+     * @param MoodleQuickForm $form
+     * @return void
+     */
+    private function move_catmodel_selector_block_above_grading(MoodleQuickForm $form): void {
+        $anchor = null;
+
+        if ($form->elementExists('modstandardgrade')) {
+            $anchor = 'modstandardgrade';
+        } else if ($form->elementExists('grademethod')) {
+            // Fallback for forms without grading header.
+            $anchor = 'grademethod';
+        }
+
+        if (!$anchor) {
+            return;
+        }
+
+        foreach (['advancedheading', 'catmodel', 'catmodelfieldsmarker'] as $elementname) {
+            if (!$form->elementExists($elementname)) {
+                continue;
+            }
+
+            $form->insertElementBefore($form->removeElement($elementname, false), $anchor);
+        }
     }
 
     /**
