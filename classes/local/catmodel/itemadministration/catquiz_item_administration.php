@@ -83,21 +83,27 @@ final class catquiz_item_administration implements item_administration {
      * @return item_administration_evaluation
      */
     public function evaluate_ability_to_administer_next_item(?int $previousquestionslot): item_administration_evaluation {
+        /* Issue #6: when the previous item is still unanswered (for example the page
+           was reloaded before the answer was submitted), reuse its existing QUBA slot
+           instead of selecting a new question. Selecting a new question here would
+           make mod_adaptivequiz add a SECOND slot for the same item, letting the
+           question usage and the CAT progress diverge - the attempt then runs past
+           its configured length. This has to happen before the CAT selection, not
+           after it. */
+        if (
+            $previousquestionslot !== null
+            && $this->quba->get_question_state($previousquestionslot)->is_active()
+        ) {
+            return item_administration_evaluation::with_next_item(
+                next_item::from_quba_slot($previousquestionslot)
+            );
+        }
+
         [$questionid, $errormessage] = catquiz_handler::fetch_question_id(
             $this->adaptivequiz->id,
             'mod_adaptivequiz',
             $this->attempt->get_attempt()
         );
-        // This means no answer has been given yet, it's a fresh attempt.
-        if (is_null($previousquestionslot)) {
-            if ($questionid === 0) {
-                return item_administration_evaluation::with_stoppage_reason(
-                    $errormessage
-                );
-            }
-
-            return item_administration_evaluation::with_next_item(next_item::from_question_id($questionid));
-        }
 
         if ($questionid === 0) {
             return item_administration_evaluation::with_stoppage_reason(
