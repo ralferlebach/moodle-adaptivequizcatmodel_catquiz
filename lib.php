@@ -67,3 +67,31 @@ function adaptivequizcatmodel_catquiz_post_process_item_result_callback(
     attempt $attempt
 ): void {
 }
+
+/**
+ * Callback returning the URL of this sub-plugin's own attempts report.
+ *
+ * Picked up by mod_adaptivequiz only (see attempts_number::when_custom_catmodel_in_use).
+ * When a custom CAT model is in use, the activity does NOT render its built-in
+ * attempts report - it only shows the number of attempts, and turns that number
+ * into a link when this callback provides a URL. Without the callback a
+ * teacher has no way at all to reach an attempts overview (and, through it, the
+ * "Close attempt" action) for a catquiz-driven activity.
+ *
+ * The report is local_catquiz's own feedback page, which lists the attempts of the
+ * given activity instance.
+ *
+ * @param stdClass $adaptivequiz An activity instance record.
+ * @param stdClass $cm A course module record, as returned by get_coursemodule_from_id().
+ *
+ * @return moodle_url
+ */
+function adaptivequizcatmodel_catquiz_attempts_report_url(stdClass $adaptivequiz, stdClass $cm): moodle_url {
+    return new moodle_url(
+        '/local/catquiz/feedback.php',
+        [
+            'courseid' => $cm->course,
+            'instanceid' => $adaptivequiz->id,
+        ]
+    );
+}
