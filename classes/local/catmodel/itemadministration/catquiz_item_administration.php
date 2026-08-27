@@ -57,7 +57,9 @@ final class catquiz_item_administration implements item_administration {
      * The constructor.
      *
      * @param question_usage_by_activity $quba
+     * @param question_answer_evaluation $questionanswerevaluation
      * @param stdClass $adaptivequiz
+     * @param attempt $attempt
      */
     public function __construct(
         question_usage_by_activity $quba,

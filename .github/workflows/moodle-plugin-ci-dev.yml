@@ -1,0 +1,180 @@
+##############################################################################
+# Moodle Plugin CI - development pipeline for adaptivequizcatmodel_catquiz
+#
+# Runs on push / PR to every branch EXCEPT main.
+#
+#     lint-php (phplint, no Moodle install) ──▶ phpunit
+#
+# Both jobs tee their output into ci-logs/ and offer it as an "error summary"
+# ZIP artifact. The full matrix runs on main via moodle-plugin-ci-main.yml.
+#
+# This sub-plugin lives inside mod/adaptivequiz/catmodel/catquiz, so the host
+# module AND local_catquiz must be installed alongside it.
+##############################################################################
+
+name: Moodle Plugin CI Dev
+
+on:
+  push:
+    branches-ignore:
+      - main
+    tags:
+      - '[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches-ignore:
+      - main
+
+concurrency:
+  group: ci-dev-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  lint-php:
+    name: "PHP lint (phplint)"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+
+      - name: PHP Lint
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phplint plugin 2>&1 | tee ci-logs/phplint.log
+
+
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: lint-php"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-lint-php
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # -- Code analysis (no install; gates ci-complete, not the test suites) --
+  # The Moodle Code Checker (phpcs) is a coding-style gate: it never affects
+  # whether the code runs, so it is NOT a prerequisite of phpunit/behat (only
+  # phplint is). It runs here, blocking, and this job gates ci-complete. phpmd /
+  # phpcpd stay advisory (continue-on-error).
+  phpunit:
+    name: "PHPUnit / PHP ${{ matrix.php }} / ${{ matrix.database }}"
+    runs-on: ubuntu-22.04
+    needs: [lint-php]
+
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: 'postgres'
+          POSTGRES_HOST_AUTH_METHOD: 'trust'
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
+      mariadb:
+        image: mariadb:10.8
+        env:
+          MYSQL_USER: 'root'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval 10s --health-timeout 5s --health-retries 3
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { php: '8.1', database: pgsql }
+          - { php: '8.2', database: mariadb }
+          - { php: '8.3', database: pgsql }
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+
+      - name: Prepare log directory
+        run: mkdir -p ci-logs
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          ini-values: max_input_vars=5000
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ github.sha }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Initialise moodle-plugin-ci
+        run: |
+          composer create-project -n --no-dev --prefer-dist moodlehq/moodle-plugin-ci ci ^4
+          echo $(cd ci/bin; pwd) >> $GITHUB_PATH
+          echo $(cd ci/vendor/bin; pwd) >> $GITHUB_PATH
+          sudo locale-gen en_AU.UTF-8
+          echo "NVM_DIR=$HOME/.nvm" >> $GITHUB_ENV
+
+      - name: Install Moodle, dependencies and plugin
+        run: |
+          moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
+          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
+          moodle-plugin-ci add-plugin --branch main ralferlebach/moodle-local_catquiz
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
+          moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
+        env:
+          DB: ${{ matrix.database }}
+          MOODLE_BRANCH: MOODLE_405_STABLE
+
+      - name: PHPUnit tests
+        if: ${{ always() }}
+        run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+
+      - name: Collect error summary
+        if: ${{ always() }}
+        run: |
+          { echo "job: phpunit (PHP ${{ matrix.php }} / ${{ matrix.database }})"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
+          cat ci-logs/summary.txt
+
+      - name: Upload error summary (ZIP)
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: error-summary-dev-phpunit-${{ matrix.php }}-${{ matrix.database }}
+          path: ci-logs
+          retention-days: 7
+          if-no-files-found: ignore
+
