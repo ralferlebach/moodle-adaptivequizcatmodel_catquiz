@@ -1,5 +1,25 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## 1.0.4 (interne Version 2026082704)
+
+- **Fünf tote, nicht ladbare Klassen entfernen** – als **Git-Patch**
+  `adaptivequizcatmodel_catquiz-remove-dead-classes.patch`, weil ein ZIP über
+  einem vorhandenen Checkout keine Dateien löscht. Genau deshalb meldete der
+  Wächtertest sie im letzten CI-Lauf erneut.
+  - Betroffen: `difficulty_logit`, `cat_calculation_steps_result`,
+    `cat_model_params`, `question_answer_evaluation`,
+    `question_answer_evaluation_result`.
+  - Ihr Namespace lautet `…\local\catmodel\local\…`, die Dateien liegen unter
+    `classes/local/…`; das Verzeichnis `classes/local/catmodel/local/` existiert
+    nicht. Keine der fünf war je ladbar.
+  - **Namespace-Reparatur wäre der falsche Fix**: `cat_calculation_steps_result`
+    importiert `mod_adaptivequiz\local\catalgorithm\difficulty_logit`, und diese
+    Klasse existiert im Host-Modul **nicht** (verifiziert). Der tote Code zeigt
+    also zusätzlich ins Leere. Produktiv genutzt werden durchgehend die Pendants
+    aus `local_catquiz`.
+  - Gegengeprüft: Patch gegen den tatsächlichen Repo-Stand anwendbar; danach alle
+    vier Adapter-Suiten grün (9 Tests).
+
 ## 1.0.4 (interne Version 2026082703)
 
 - **Slot-Reuse-Logik nachgezogen.** Dieses Repo hinkte der ausgelieferten Fassung
