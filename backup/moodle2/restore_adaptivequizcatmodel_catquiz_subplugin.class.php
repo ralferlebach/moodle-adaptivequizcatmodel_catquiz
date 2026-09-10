@@ -25,6 +25,7 @@ class restore_adaptivequizcatmodel_catquiz_subplugin extends restore_subplugin {
     /**
      * Define the restore structure for the subplugin.
      *
+     * @param string $connectionpoint The connection point the structure is attached to.
      * @return array Array of restore_path_elements.
      */
     public function define_subplugin_structure($connectionpoint) {

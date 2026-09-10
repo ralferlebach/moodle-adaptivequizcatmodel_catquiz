@@ -14,9 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
-namespace adaptivequizcatmodel_catquiz\local\catmodel\local\itemadministration;
+namespace adaptivequizcatmodel_catquiz\local\catmodel\itemadministration;
 
-use adaptivequizcatmodel_catquiz\local\catmodel\local\question\question_answer_evaluation;
+use local_catquiz\local\question\question_answer_evaluation;
 use mod_adaptivequiz\local\itemadministration\item_administration_factory;
 use mod_adaptivequiz\local\itemadministration\item_administration;
 use mod_adaptivequiz\local\attempt;
