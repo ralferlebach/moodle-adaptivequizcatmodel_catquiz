@@ -23,6 +23,7 @@
  */
 
 use local_catquiz\catquiz_handler;
+use local_catquiz\local\attempt\attempt_finalizer;
 use local_catquiz\local\attempt\cat_model_params;
 use mod_adaptivequiz\local\attempt;
 
@@ -94,4 +95,65 @@ function adaptivequizcatmodel_catquiz_attempts_report_url(stdClass $adaptivequiz
             'instanceid' => $adaptivequiz->id,
         ]
     );
+}
+
+/**
+ * Finalises the CAT result when the activity marks an attempt as completed.
+ *
+ * The activity calls this from the status change, not from the result page. Whether a participant
+ * ever reaches that page is up to them; the result has to be persisted either way.
+ * attempt_finalizer::finalize() is idempotent, so a later render path calling it again is harmless.
+ *
+ * @param stdClass $adaptivequiz The activity instance record.
+ * @param context_module $context The context of that activity.
+ * @param int $userid The user the attempt belongs to.
+ * @param stdClass $attempt The completed attempt record.
+ */
+function adaptivequizcatmodel_catquiz_post_complete_attempt_callback(
+    stdClass $adaptivequiz,
+    context_module $context,
+    int $userid,
+    stdClass $attempt
+): void {
+    $timefinished = (int) ($attempt->timefinished ?? $attempt->timemodified ?? time());
+
+    attempt_finalizer::finalize(
+        (int) $attempt->id,
+        $timefinished,
+        (string) ($attempt->attemptstopcriteria ?? '')
+    );
+}
+
+/**
+ * Removes what CATquiz holds for an attempt the activity has deleted.
+ *
+ * The activity owns the attempt; CATquiz owns the ability estimates, the progress and the scale
+ * results belonging to it. Deleting the attempt without this leaves those rows behind - personal
+ * data of a user for an attempt that no longer exists.
+ *
+ * @param stdClass $adaptivequiz The activity instance record.
+ * @param stdClass $attempt The attempt that was deleted.
+ */
+function adaptivequizcatmodel_catquiz_post_delete_attempt_callback(
+    stdClass $adaptivequiz,
+    stdClass $attempt
+): void {
+    global $DB;
+
+    $attemptid = (int) $attempt->id;
+
+    $catattemptids = $DB->get_fieldset_select(
+        'local_catquiz_attempts',
+        'id',
+        'attemptid = :attemptid AND component = :component',
+        ['attemptid' => $attemptid, 'component' => 'mod_adaptivequiz']
+    );
+
+    if (!empty($catattemptids)) {
+        [$insql, $inparams] = $DB->get_in_or_equal($catattemptids, SQL_PARAMS_NAMED);
+        $DB->delete_records_select('local_catquiz_attemptscale', "catattemptid $insql", $inparams);
+        $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
+    }
+
+    $DB->delete_records('local_catquiz_progress', ['attemptid' => $attemptid, 'component' => 'mod_adaptivequiz']);
 }

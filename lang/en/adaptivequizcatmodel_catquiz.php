@@ -33,3 +33,4 @@ $string['highestlevel_help'] = 'The highest or most difficult level the assessme
 $string['lowestlevel'] = 'Lowest level of difficulty';
 $string['lowestlevel_help'] = 'The lowest or least difficult level the assessment can select questions from.  During an attempt the activity will not go beyond this level of difficulty';
 $string['pluginname'] = 'Catquiz CAT model';
+$string['privacy:metadata:local_catquiz'] = 'The results this CAT model computes are stored by local_catquiz.';
