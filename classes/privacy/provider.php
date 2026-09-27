@@ -38,7 +38,7 @@ use mod_adaptivequiz\privacy\adaptivequizcatmodel_provider;
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class provider implements \core_privacy\local\metadata\provider, adaptivequizcatmodel_provider {
+class provider implements adaptivequizcatmodel_provider, \core_privacy\local\metadata\provider {
     /**
      * Declares that the data reached from here belongs to local_catquiz.
      *
@@ -86,11 +86,14 @@ class provider implements \core_privacy\local\metadata\provider, adaptivequizcat
         }
 
         [$insql, $inparams] = $DB->get_in_or_equal($hostattemptids, SQL_PARAMS_NAMED);
+        // Both spellings of the component: the result page stores 'adaptivequiz', the start of an
+        // attempt 'mod_adaptivequiz'. Exporting or deleting only one would miss personal data.
+        [$compsql, $compparams] = $DB->get_in_or_equal(['mod_adaptivequiz', 'adaptivequiz'], SQL_PARAMS_NAMED, 'comp');
         $catattemptids = $DB->get_fieldset_select(
             'local_catquiz_attempts',
             'id',
-            "attemptid $insql AND component = :component",
-            $inparams + ['component' => 'mod_adaptivequiz']
+            "attemptid $insql AND component $compsql",
+            $inparams + $compparams
         );
 
         return [$catattemptids, $hostattemptids];
@@ -117,7 +120,9 @@ class provider implements \core_privacy\local\metadata\provider, adaptivequizcat
 
         $exported = [];
         foreach ($attempts as $attempt) {
-            $scales = $DB->get_records('local_catquiz_attemptscale', ['catattemptid' => $attempt->id]);
+            // The scale results of an attempt live in local_catquiz_personparams since local_catquiz
+            // 1.2.1/1.3.0, referenced by the CAT attempt.
+            $scales = $DB->get_records('local_catquiz_personparams', ['attemptid' => $attempt->id]);
 
             $exported[] = (object) [
                 'teststrategy' => $attempt->teststrategy,
@@ -127,7 +132,7 @@ class provider implements \core_privacy\local\metadata\provider, adaptivequizcat
                 'abilityafter' => $attempt->personability_after_attempt,
                 'scales' => array_values(array_map(fn($scale) => (object) [
                     'catscaleid' => $scale->catscaleid,
-                    'ability' => $scale->score,
+                    'ability' => $scale->ability,
                     'standarderror' => $scale->standarderror,
                     'questions' => $scale->n,
                     'isprimary' => $scale->isprimary,
@@ -211,17 +216,11 @@ class provider implements \core_privacy\local\metadata\provider, adaptivequizcat
 
         if (!empty($catattemptids)) {
             [$insql, $inparams] = $DB->get_in_or_equal($catattemptids, SQL_PARAMS_NAMED);
-            $DB->delete_records_select('local_catquiz_attemptscale', "catattemptid $insql", $inparams);
+            $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql", $inparams);
+            // Progress references the CAT attempt since local_catquiz issue #95, not the attempt of
+            // the activity. Deleting by the activity's ids removed nothing - or someone else's row.
+            $DB->delete_records_select('local_catquiz_progress', "attemptid $insql", $inparams);
             $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
-        }
-
-        if (!empty($hostattemptids)) {
-            [$insql, $inparams] = $DB->get_in_or_equal($hostattemptids, SQL_PARAMS_NAMED);
-            $DB->delete_records_select(
-                'local_catquiz_progress',
-                "attemptid $insql AND component = :component",
-                $inparams + ['component' => 'mod_adaptivequiz']
-            );
         }
     }
 }

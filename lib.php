@@ -142,18 +142,23 @@ function adaptivequizcatmodel_catquiz_post_delete_attempt_callback(
 
     $attemptid = (int) $attempt->id;
 
+    // The table local_catquiz_attempts stores the component in two spellings: 'adaptivequiz' from the result
+    // page, 'mod_adaptivequiz' from the start of the attempt. Both belong to this attempt.
+    [$compsql, $compparams] = $DB->get_in_or_equal(['mod_adaptivequiz', 'adaptivequiz'], SQL_PARAMS_NAMED, 'comp');
     $catattemptids = $DB->get_fieldset_select(
         'local_catquiz_attempts',
         'id',
-        'attemptid = :attemptid AND component = :component',
-        ['attemptid' => $attemptid, 'component' => 'mod_adaptivequiz']
+        "attemptid = :attemptid AND component $compsql",
+        ['attemptid' => $attemptid] + $compparams
     );
 
     if (!empty($catattemptids)) {
         [$insql, $inparams] = $DB->get_in_or_equal($catattemptids, SQL_PARAMS_NAMED);
-        $DB->delete_records_select('local_catquiz_attemptscale', "catattemptid $insql", $inparams);
+        // Since local_catquiz 1.2.1/1.3.0 the per-attempt scale results live in
+        // local_catquiz_personparams, referenced by the CAT attempt; local_catquiz_attemptscale is gone.
+        $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql", $inparams);
+        // Progress, too, references the CAT attempt, not the attempt of the component (issue #95).
+        $DB->delete_records_select('local_catquiz_progress', "attemptid $insql", $inparams);
         $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
     }
-
-    $DB->delete_records('local_catquiz_progress', ['attemptid' => $attemptid, 'component' => 'mod_adaptivequiz']);
 }

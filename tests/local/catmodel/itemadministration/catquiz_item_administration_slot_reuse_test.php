@@ -48,6 +48,7 @@ use stdClass;
  * Tests the slot reuse of the item administration.
  *
  * @package    adaptivequizcatmodel_catquiz
+ * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
 final class catquiz_item_administration_slot_reuse_test extends advanced_testcase {
     /**

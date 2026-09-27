@@ -130,24 +130,28 @@ final class provider_test extends provider_testcase {
             'timemodified' => $now,
         ]);
 
-        $DB->insert_record('local_catquiz_attemptscale', (object) [
-            'catattemptid' => $catattemptid,
+        // The per-attempt scale result, where local_catquiz keeps it since 1.2.1/1.3.0.
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'attemptid' => $catattemptid,
             'userid' => $user->id,
             'contextid' => 1,
             'catscaleid' => 1,
-            'score' => $ability,
+            'ability' => $ability,
             'standarderror' => 0.3,
             'n' => 5,
             'fraction' => 0.8,
             'isprimary' => 1,
             'isvalid' => 1,
+            'resultsource' => 'current',
             'timecreated' => $now,
+            'timemodified' => $now,
         ]);
 
+        // Progress references the CAT attempt since local_catquiz issue #95.
         $DB->insert_record('local_catquiz_progress', (object) [
             'userid' => $user->id,
             'component' => 'mod_adaptivequiz',
-            'attemptid' => $attemptid,
+            'attemptid' => $catattemptid,
             'json' => '{}',
             'quizsettings' => '{}',
         ]);
@@ -228,16 +232,22 @@ final class provider_test extends provider_testcase {
     public function test_delete_removes_the_dependent_rows(): void {
         global $DB;
 
-        provider::delete_catmodel_data_for_all_users_in_context($this->context);
-
-        $attemptids = $DB->get_fieldset_select(
+        // The CAT attempts of this activity, taken before the deletion: progress is keyed by them
+        // since local_catquiz issue #95, and no row may point to one of them afterwards. Counting by
+        // user would be wrong - the same person may have progress in another activity.
+        $hostattemptids = $DB->get_fieldset_select(
             'adaptivequiz_attempt',
             'id',
             'instance = :instance',
             ['instance' => $this->adaptivequiz->id]
         );
-        [$insql, $inparams] = $DB->get_in_or_equal($attemptids, SQL_PARAMS_NAMED);
+        [$hostsql, $hostparams] = $DB->get_in_or_equal($hostattemptids, SQL_PARAMS_NAMED, 'host');
+        $catattemptids = $DB->get_fieldset_select('local_catquiz_attempts', 'id', "attemptid $hostsql", $hostparams);
+        $this->assertNotEmpty($catattemptids, 'The fixture must file CAT attempts for this activity.');
 
+        provider::delete_catmodel_data_for_all_users_in_context($this->context);
+
+        [$insql, $inparams] = $DB->get_in_or_equal($catattemptids, SQL_PARAMS_NAMED);
         $this->assertSame(
             0,
             $DB->count_records_select('local_catquiz_progress', "attemptid $insql", $inparams),
@@ -245,7 +255,7 @@ final class provider_test extends provider_testcase {
         );
         $this->assertSame(
             0,
-            $DB->count_records('local_catquiz_attemptscale', ['catscaleid' => 1, 'userid' => $this->other->id]),
+            $DB->count_records('local_catquiz_personparams', ['catscaleid' => 1, 'userid' => $this->other->id]),
             'The scale results of the deleted attempts are still there.'
         );
     }

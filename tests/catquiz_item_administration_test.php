@@ -76,9 +76,11 @@ final class catquiz_item_administration_test extends advanced_testcase {
 
         $this->setUser($user);
 
+        // The 3.0 host reads the module context from the instance record, not from an argument.
+        $adaptivequiz->context = $modcontext;
         $adaptiveattempt = new attempt($adaptivequiz, $user->id);
         $adaptiveattempt->get_attempt();
-        $adaptiveattempt->initialize_quba($modcontext);
+        $adaptiveattempt->initialize_quba();
         $quba = $adaptiveattempt->get_quba();
 
         // Administer one question and leave it unanswered: its slot stays active.

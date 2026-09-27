@@ -40,6 +40,7 @@ use RecursiveIteratorIterator;
  * Tests that the namespace of every class matches its location.
  *
  * @package    adaptivequizcatmodel_catquiz
+ * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
 final class autoloading_test extends advanced_testcase {
     /**

@@ -37,6 +37,7 @@ use ReflectionClass;
  * Tests the factory contract with mod_adaptivequiz.
  *
  * @package    adaptivequizcatmodel_catquiz
+ * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration_factory
  */
 final class catquiz_item_administration_factory_test extends advanced_testcase {
     /**
