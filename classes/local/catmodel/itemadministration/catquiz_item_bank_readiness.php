@@ -40,7 +40,7 @@ final class catquiz_item_bank_readiness implements catmodel_item_bank_readiness 
      * @return bool
      */
     public function is_item_bank_ready(stdClass $adaptivequiz): bool {
-        // local_catquiz cannot be declared as a dependency here - it depends on this subplugin, and
+        // The plugin local_catquiz cannot be declared as a dependency here - it depends on this subplugin, and
         // the pair would become uninstallable. An older local_catquiz without the readiness check
         // must not block every attempt: it had no such notion, so it counts as ready.
         if (!method_exists(catquiz_handler::class, 'is_ready_for_attempt')) {

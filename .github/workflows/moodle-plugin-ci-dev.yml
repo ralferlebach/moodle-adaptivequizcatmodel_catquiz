@@ -93,7 +93,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:13
+        image: postgres:17
         env:
           POSTGRES_USER: 'postgres'
           POSTGRES_HOST_AUTH_METHOD: 'trust'
@@ -101,7 +101,7 @@ jobs:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 3
       mariadb:
-        image: mariadb:10.8
+        image: mariadb:11.4
         env:
           MYSQL_USER: 'root'
           MYSQL_ALLOW_EMPTY_PASSWORD: "true"
@@ -113,9 +113,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { php: '8.1', database: pgsql }
-          - { php: '8.2', database: mariadb }
+          # Moodle 5.3 needs PHP 8.3 or later; 8.1 and 8.2 could never install.
           - { php: '8.3', database: pgsql }
+          - { php: '8.3', database: mariadb }
+          - { php: '8.4', database: pgsql }
 
     steps:
       - uses: actions/checkout@v4
@@ -154,6 +155,16 @@ jobs:
           moodle-plugin-ci add-plugin --branch migration-zu-moodle-5.x ralferlebach/moodle-local_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          # local_catquiz is cloned by add-plugin without its submodules; the checkout
+          # leaves catquizcentralhub/host and catquizcentralhub/client behind as empty
+          # directories. moodle-plugin-ci refuses to install into a directory that already
+          # exists - it checks is_dir(), not whether a plugin is in it - and aborts with
+          # "Plugin is already installed in standard Moodle". local_catquiz's own CI removes
+          # the same placeholders; here they sit in the added plugin rather than the checkout.
+          for placeholder in $(find ./moodle-plugin-ci-plugins -path '*catquizcentralhub/*' -mindepth 1 -type d -empty 2>/dev/null); do
+            echo "leerer Submodul-Platzhalter entfernt: $placeholder"
+            rmdir "$placeholder"
+          done
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
