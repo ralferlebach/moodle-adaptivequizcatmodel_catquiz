@@ -149,11 +149,21 @@ jobs:
       - name: Install Moodle, dependencies and plugin
         run: |
           moodle-plugin-ci add-plugin --branch main Wunderbyte-GmbH/moodle-local_wunderbyte_table
-          moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
-          moodle-plugin-ci add-plugin --branch main ralferlebach/moodle-local_catquiz
+          moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-local_catquiz
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
+          # local_catquiz is cloned by add-plugin without its submodules; the checkout
+          # leaves catquizcentralhub/host and catquizcentralhub/client behind as empty
+          # directories. moodle-plugin-ci refuses to install into a directory that already
+          # exists - it checks is_dir(), not whether a plugin is in it - and aborts with
+          # "Plugin is already installed in standard Moodle". The same placeholders are
+          # removed in local_catquiz's own CI.
+          for placeholder in $(find ./moodle-plugin-ci-plugins -path '*catquizcentralhub/*' -mindepth 1 -type d -empty 2>/dev/null); do
+            echo "leerer Submodul-Platzhalter entfernt: $placeholder"
+            rmdir "$placeholder"
+          done
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
