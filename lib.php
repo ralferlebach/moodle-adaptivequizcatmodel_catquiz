@@ -68,6 +68,35 @@ function adaptivequizcatmodel_catquiz_post_process_item_result_callback(
 ): void {
 }
 
+
+/**
+ * Finalises the CAT result when the activity marks an attempt as completed.
+ *
+ * The activity calls this from the status change - on every way an attempt ends: the stopping
+ * criteria, no item left, a teacher closing it, the time limit. Until now this function was
+ * missing in this line, so an attempt was finalised only when its result page was built: an
+ * attempt whose page was never opened had no stored result, no completion event and no enrolment.
+ * attempt_finalizer::finalize() is idempotent, so the render path calling it again is harmless.
+ *
+ * @param stdClass $adaptivequiz The activity instance record.
+ * @param context_module $context The context of that activity.
+ * @param int $userid The user the attempt belongs to.
+ * @param stdClass $attempt The completed attempt record.
+ */
+function adaptivequizcatmodel_catquiz_post_complete_attempt_callback(
+    stdClass $adaptivequiz,
+    context_module $context,
+    int $userid,
+    stdClass $attempt
+): void {
+    $timefinished = (int) ($attempt->timefinished ?? $attempt->timemodified ?? time());
+
+    \local_catquiz\local\attempt\attempt_finalizer::finalize(
+        (int) $attempt->id,
+        $timefinished,
+        (string) ($attempt->attemptstopcriteria ?? '')
+    );
+}
 /**
  * Callback returning the URL of this sub-plugin's own attempts report.
  *
