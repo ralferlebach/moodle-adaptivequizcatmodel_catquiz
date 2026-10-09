@@ -124,3 +124,22 @@ function adaptivequizcatmodel_catquiz_attempts_report_url(stdClass $adaptivequiz
         ]
     );
 }
+
+/**
+ * Whether the owner of a finished attempt may review its questions, files included.
+ *
+ * The activity asks this before it serves the files of a finished attempt's questions to its
+ * owner - for instance in the question modals of the result page, also when the activity has been
+ * hidden since. The test decides through its setting to show the questions.
+ *
+ * @param stdClass $adaptivequiz The activity instance record.
+ * @param stdClass $attempt The finished attempt.
+ * @return bool
+ */
+function adaptivequizcatmodel_catquiz_completed_attempt_review_allowed(stdClass $adaptivequiz, stdClass $attempt): bool {
+    // An older local_catquiz lacks the class; then nothing is released.
+    if (!class_exists(\local_catquiz\local\access\question_review::class)) {
+        return false;
+    }
+    return \local_catquiz\local\access\question_review::released_to_owner((int) $adaptivequiz->id);
+}

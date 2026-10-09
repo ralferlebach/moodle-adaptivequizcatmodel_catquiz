@@ -1,5 +1,13 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026100900
+
+- mod_adaptivequiz #18: Rückruf `adaptivequizcatmodel_catquiz_completed_attempt_review_allowed()`.
+  Die Aktivität fragt ihn, bevor sie dem Besitzer die Dateien der Fragen eines abgeschlossenen
+  Versuchs ausliefert (Bilder, STACK-Grafiken in den Frage-Modals), auch bei inzwischen
+  verborgener Aktivität. Freigabe nach der Testeinstellung „Fragen anzeigen“
+  (`catquiz_showquestion`). Ohne passendes local_catquiz wird nichts freigegeben.
+
 ## 1.0.4 (interne Version 2026082704)
 
 - **Fünf tote, nicht ladbare Klassen entfernen** – als **Git-Patch**
