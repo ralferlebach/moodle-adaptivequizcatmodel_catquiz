@@ -1,5 +1,18 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026100901
+
+- Issue #7: CATquiz als Ergebnisquelle im Ergebnisvertrag der Aktivität (mod_adaptivequiz #14):
+  `local\catmodel\result\catquiz_result_provider`. Score ist die beim Finalisieren
+  abgelegte Fähigkeit der primären Skala dieses Versuchs (`local_catquiz_personparams`,
+  `isprimary`/`isvalid`), nicht der aktuelle Personenparameter und nie das `measure` der
+  Aktivität. Bereich ist der Fähigkeitsbereich der Skala (Wurzelskala), den die Aktivität
+  beim Abschluss mit dem Versuch festhält. Ungültig (u. a. Fraktion 0/1), nicht finalisiert,
+  keine oder mehrdeutige primäre Skala, fehlender Bereich: kein bewertbarer Score, der
+  Grund geht mit. Linkfunktion `linear`. Gradebook und Abschluss bleiben bei der Aktivität;
+  die Note entsteht im Abschlussablauf, ohne dass die Ergebnisseite geöffnet wird.
+  Benötigt mod_adaptivequiz 2026100902.
+
 ## Interne Version 2026100900
 
 - mod_adaptivequiz #18: Rückruf `adaptivequizcatmodel_catquiz_completed_attempt_review_allowed()`.
