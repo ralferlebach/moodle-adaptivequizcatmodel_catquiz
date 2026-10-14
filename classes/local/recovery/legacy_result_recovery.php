@@ -239,7 +239,10 @@ final class legacy_result_recovery {
             $row->steps[] = 'range_from_current_scale';
         }
 
-        $rejection = catquiz_result_provider::rejection($global);
+        $rejection = catquiz_result_provider::rejection(
+            $global,
+            catquiz_result_provider::quiz_settings($catattempt, (object) ['id' => $row->instanceid])
+        );
         if ($rejection === null && $row->rangelower === null) {
             $rejection = catquiz_result_provider::REASON_RANGE_NOT_RECORDED;
         }
@@ -265,7 +268,8 @@ final class legacy_result_recovery {
      *
      * @param \local_catquiz\local\result\attempt_result $result
      * @param int|null $globalscaleid
-     * @return stdClass|null ability, isvalid, validationstatus - null when the global scale has no result.
+     * @return stdClass|null ability, n, standarderror, fraction, isvalid, validationstatus - null when the global
+     *      scale has no result.
      */
     private static function predicted_row(\local_catquiz\local\result\attempt_result $result, ?int $globalscaleid): ?stdClass {
         if ($globalscaleid === null) {
@@ -278,6 +282,9 @@ final class legacy_result_recovery {
             }
             return (object) [
                 'ability' => $scaleresult->score,
+                'n' => $scaleresult->n,
+                'standarderror' => $scaleresult->standarderror,
+                'fraction' => $scaleresult->fraction,
                 'isvalid' => $scaleresult->valid ? 1 : 0,
                 'validationstatus' => implode(',', $scaleresult->rejectionreasons),
             ];

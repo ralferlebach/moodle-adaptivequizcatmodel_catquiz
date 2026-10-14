@@ -17,7 +17,9 @@
 namespace adaptivequizcatmodel_catquiz\local\catmodel\result;
 
 use local_catquiz\catscale;
+use local_catquiz\local\result\global_scale_validity;
 use local_catquiz\local\result\personparam_repository;
+use local_catquiz\teststrategy\progress;
 use mod_adaptivequiz\local\result\attempt_result;
 use mod_adaptivequiz\local\result\result_definition;
 use mod_adaptivequiz\local\result\result_provider;
@@ -30,8 +32,10 @@ use stdClass;
  * (mod_adaptivequiz issue #14). The score is the ability of the attempt's global scale - the scale of
  * the test when the attempt was finalised - as the finaliser filed it for this attempt (decision of
  * 2026-10-14: graded on the global scale, not on the scale a strategy reports first). It is gradable
- * when the global scale is statistically valid and measured; that it is not the reported scale, or
- * not reported at all, does not stand in the way. Never the current person parameters, which later
+ * when the global scale meets every criterion the test sets - minimum questions per scale and of the
+ * test, maximum standard error, the general fraction rule - as local_catquiz global_scale_validity
+ * judges it with the test settings of the attempt; that it is not the reported scale, or not reported
+ * at all, does not stand in the way. Never the current person parameters, which later
  * attempts overwrite, and never the host's measure, which CATquiz does not maintain. The range is the
  * ability range of the scale as CATquiz froze it with the result when it finalised the attempt
  * (local_catquiz #137), so a later change of the scale does not change what the attempt was worth -
@@ -119,7 +123,7 @@ final class catquiz_result_provider implements result_provider {
         }
         $row = $global[0];
 
-        $rejection = self::rejection($row);
+        $rejection = self::rejection($row, self::quiz_settings($catattempt, $adaptivequiz));
         if ($rejection !== null) {
             return attempt_result::invalid($rejection);
         }
@@ -135,15 +139,21 @@ final class catquiz_result_provider implements result_provider {
     /**
      * Why the stored result of a global scale is not gradable, or null when it is.
      *
-     * Gradable: a numeric ability that CATquiz judged valid, or that it rejected only for how the scale
-     * is shown - not the scale a strategy reports first, reporting switched off, hidden.
+     * The criteria of local_catquiz global_scale_validity, applied to the stored N, standard error and
+     * fraction of the global scale. A CATquiz without that class (before 2026100918) falls back to its
+     * stored verdict, less the reasons that only say how a scale is shown.
      *
-     * @param stdClass $row local_catquiz_personparams (ability, isvalid, validationstatus).
+     * @param stdClass $row local_catquiz_personparams (ability, n, standarderror, fraction, isvalid, validationstatus).
+     * @param stdClass|null $quizsettings The test settings of the attempt; null applies no configured criterion.
      * @return string|null The reasons, comma separated.
      */
-    public static function rejection(stdClass $row): ?string {
+    public static function rejection(stdClass $row, ?stdClass $quizsettings = null): ?string {
         if (!is_numeric($row->ability ?? null)) {
             return self::REASON_INVALID;
+        }
+        if (class_exists(global_scale_validity::class)) {
+            $reasons = global_scale_validity::reasons($row, $quizsettings);
+            return $reasons ? implode(',', $reasons) : null;
         }
         if (!empty($row->isvalid)) {
             return null;
@@ -154,6 +164,35 @@ final class catquiz_result_provider implements result_provider {
         }
         $statistical = array_values(array_diff($reasons, self::PRESENTATION_REASONS));
         return $statistical ? implode(',', $statistical) : null;
+    }
+
+    /**
+     * The test settings an attempt ran with: from its progress, else the test's settings today.
+     *
+     * @param stdClass $catattempt local_catquiz_attempts
+     * @param stdClass $adaptivequiz
+     * @return stdClass|null
+     */
+    public static function quiz_settings(stdClass $catattempt, stdClass $adaptivequiz): ?stdClass {
+        global $DB;
+        try {
+            $progress = progress::load_for_reading((int) $catattempt->id);
+            if ($progress !== null) {
+                return $progress->get_quiz_settings();
+            }
+        } catch (\Throwable $e) {
+            // Unreadable progress: the test's settings today.
+            unset($e);
+        }
+        $instanceid = $adaptivequiz->id ?? $catattempt->instanceid ?? null;
+        $json = $instanceid ? $DB->get_field(
+            'local_catquiz_tests',
+            'json',
+            ['component' => 'mod_adaptivequiz', 'componentid' => $instanceid],
+            IGNORE_MULTIPLE
+        ) : false;
+        $settings = $json ? json_decode($json) : null;
+        return $settings instanceof stdClass ? $settings : null;
     }
 
     /**

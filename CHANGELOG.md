@@ -1,5 +1,24 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026100905
+
+- CI-Fix: Die Spalte `rangesource` der Recovery-Tabelle `adaptivequiz_cat_recovery` war CHAR NOT NULL mit
+  `''` als Vorgabe. XMLDB meldet das bei der Installation als Debugging-Meldung, und moodle-plugin-ci
+  bricht dann `phpunit --install` ab (rote PHPUnit- und Behat-Läufe hier und in local_catquiz, die den
+  Adapter mitinstallieren). Die Spalte ist jetzt NULL-fähig ohne Vorgabe; der Upgrade-Schritt 2026100905
+  stellt bestehende Installationen um.
+
+## Interne Version 2026100904
+
+- Bewertung der Globalskala nach den Kriterien des Tests (Entscheidung vom 14.10.2026): Mindestfragen pro
+  Skala und des Tests, maximaler Standardfehler, Fraction-Regel – angewandt auf N, Standardfehler und
+  Fraction, die CATquiz für die Globalskala des Versuchs gespeichert hat, mit den Testeinstellungen des
+  Versuchs (Progress, sonst die heutigen des Tests). Das Urteil der Strategie über die Skala zählt nicht
+  mehr. Braucht local_catquiz 2026100918 (`global_scale_validity`); mit einem älteren CATquiz gilt das
+  bisherige Urteil ohne die Darstellungsgründe. Die Recovery urteilt im Probelauf nach derselben Regel.
+  Tests: `result_provider_test::test_verdict_on_the_global_scale` (10 Fälle),
+  `::test_graded_on_the_global_scale`.
+
 ## Interne Version 2026100903
 
 - **Bewertung auf der Globalskala** (Entscheidung vom 14.10.2026): Die Note ist das Ergebnis der
