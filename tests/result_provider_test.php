@@ -18,6 +18,7 @@ namespace adaptivequizcatmodel_catquiz;
 
 use adaptivequizcatmodel_catquiz\local\catmodel\result\catquiz_result_provider;
 use advanced_testcase;
+use context_course;
 use context_module;
 use mod_adaptivequiz\local\result\attempt_result;
 use mod_adaptivequiz\local\result\result_service;
@@ -167,6 +168,57 @@ final class result_provider_test extends advanced_testcase {
         $this->assertEqualsWithDelta(-4.0, (float) $attempt->resultlower, 1e-9);
         $this->assertEqualsWithDelta(4.0, (float) $attempt->resultupper, 1e-9);
         $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+    }
+
+    /**
+     * A question the system administered twice changes neither the grade nor the completion (#125).
+     *
+     * The usage holds four questions and the first one again in a fifth slot - the technical duplicate
+     * of older activity versions. The result is the one of the four: valid, 65 %, and the rule
+     * "valid result" is met. The duplicate is no reason to invalidate and no second measurement.
+     */
+    public function test_technical_duplicate_changes_neither_grade_nor_completion(): void {
+        global $CFG, $DB;
+        require_once($CFG->libdir . '/completionlib.php');
+        $this->resetAfterTest();
+        // Completion is switched on afterwards: the course has none when the activity is created.
+        $this->activity(-4, 4);
+        $DB->set_field('course', 'enablecompletion', 1, ['id' => $this->course->id]);
+        $DB->set_field('adaptivequiz', 'completionvalidresult', 1, ['id' => $this->adaptivequiz->id]);
+        $DB->set_field('course_modules', 'completion', COMPLETION_TRACKING_AUTOMATIC, [
+            'id' => get_coursemodule_from_instance('adaptivequiz', $this->adaptivequiz->id)->id,
+        ]);
+
+        $attempt = $this->attempt(1.2);
+        $cm = get_coursemodule_from_instance('adaptivequiz', $this->adaptivequiz->id);
+        $context = context_module::instance($cm->id);
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category(['contextid' => context_course::instance($this->course->id)->id]);
+        $quba = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        $first = null;
+        for ($i = 0; $i < 4; $i++) {
+            $question = \question_bank::load_question(
+                $generator->create_question('truefalse', null, ['category' => $category->id])->id
+            );
+            $first = $first ?? $question;
+            $quba->add_question($question);
+        }
+        $quba->add_question($first);
+        $quba->start_all_questions();
+        \question_engine::save_questions_usage_by_activity($quba);
+        $DB->set_field('adaptivequiz_attempt', 'uniqueid', $quba->get_id(), ['id' => $attempt->id]);
+        $attempt->uniqueid = $quba->get_id();
+
+        $attempt = $this->complete($attempt);
+
+        $this->assertEquals(1, $attempt->resultvalid);
+        $this->assertEqualsWithDelta(1.2, (float) $attempt->resultscore, 1e-4);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+        rebuild_course_cache($this->course->id, true);
+        $cminfo = get_fast_modinfo($this->course->id, (int) $this->user->id)->get_cm($cm->id);
+        $completion = new \mod_adaptivequiz\completion\custom_completion($cminfo, (int) $this->user->id);
+        $this->assertSame(COMPLETION_COMPLETE, $completion->get_state('completionvalidresult'));
     }
 
     /**

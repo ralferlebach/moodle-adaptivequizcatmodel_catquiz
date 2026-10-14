@@ -168,7 +168,7 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
-          MOODLE_BRANCH: main  # Moodle 5.3; bis zum Verzweigen am 5. Oktober nur als main.
+          MOODLE_BRANCH: MOODLE_503_STABLE  # Moodle 5.3; seit dem 5. Oktober verzweigt, main ist 5.4dev.
 
       - name: PHPUnit tests
         if: ${{ always() }}
