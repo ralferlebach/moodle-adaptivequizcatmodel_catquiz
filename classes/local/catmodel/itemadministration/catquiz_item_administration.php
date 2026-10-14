@@ -16,6 +16,7 @@
 
 namespace adaptivequizcatmodel_catquiz\local\catmodel\itemadministration;
 
+use adaptivequizcatmodel_catquiz\local\catmodel\stop_code;
 use local_catquiz\catquiz_handler;
 use mod_adaptivequiz\local\attempt;
 use mod_adaptivequiz\local\itemadministration\item_administration;
@@ -99,15 +100,18 @@ final class catquiz_item_administration implements item_administration {
             );
         }
 
-        [$questionid, $errormessage] = catquiz_handler::fetch_question_id(
+        $fetched = catquiz_handler::fetch_question_id(
             $this->adaptivequiz->id,
             'mod_adaptivequiz',
             $this->attempt->get_attempt()
         );
+        [$questionid, $errormessage] = $fetched;
 
         if ($questionid === 0) {
+            // Why, as a code (mod_adaptivequiz #20); an older CATquiz gives no status.
             return item_administration_evaluation::with_stoppage_reason(
-                $errormessage
+                $errormessage,
+                stop_code::from_status($fetched[2] ?? null)
             );
         }
 

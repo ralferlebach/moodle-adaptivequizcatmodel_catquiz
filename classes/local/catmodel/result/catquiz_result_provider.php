@@ -30,8 +30,9 @@ use stdClass;
  * (mod_adaptivequiz issue #14). The score is the ability of the primary scale as the finaliser
  * filed it for this attempt, with CATquiz's own verdict on its validity - not the current person
  * parameters, which later attempts overwrite, and never the host's measure, which CATquiz does not
- * maintain. The range is the ability range of the scale; the host keeps it with the attempt, so a
- * later change of the scale does not change what the attempt was worth.
+ * maintain. The range is the ability range of the scale as CATquiz froze it with the result when it
+ * finalised the attempt (local_catquiz #137), so a later change of the scale does not change what
+ * the attempt was worth - not even when the host takes its snapshot again.
  *
  * Gradebook and completion stay with the host: this class only reports.
  *
@@ -51,6 +52,9 @@ final class catquiz_result_provider implements result_provider {
 
     /** @var string The primary scale has no range. */
     public const REASON_NO_RANGE = 'range_unavailable';
+
+    /** @var string The attempt was finalised before CATquiz recorded the range with the result. */
+    public const REASON_RANGE_NOT_RECORDED = 'range_not_recorded';
 
     /** @var string A primary scale that CATquiz rejected without naming a reason. */
     public const REASON_INVALID = 'invalid';
@@ -108,12 +112,13 @@ final class catquiz_result_provider implements result_provider {
         }
 
         $row = reset($valid);
-        $range = self::range((int) $row->catscaleid);
-        if ($range === null) {
-            return attempt_result::invalid(self::REASON_NO_RANGE);
+        // Issue #137 (CATquiz): the range frozen when the attempt was finalised - never today's.
+        if (!isset($row->rangelower, $row->rangeupper) || !is_numeric($row->rangelower) || !is_numeric($row->rangeupper)) {
+            // Finalised before ranges were recorded: the range of that time is unknown, and none is invented.
+            return attempt_result::invalid(self::REASON_RANGE_NOT_RECORDED);
         }
 
-        return attempt_result::valid((float) $row->ability, $range[0], $range[1]);
+        return attempt_result::valid((float) $row->ability, (float) $row->rangelower, (float) $row->rangeupper);
     }
 
     /**
