@@ -30,8 +30,8 @@ use mod_adaptivequiz\local\question_file_access;
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers ::adaptivequizcatmodel_catquiz_completed_attempt_review_allowed
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('adaptivequizcatmodel_catquiz_completed_attempt_review_allowed')]
 final class review_access_test extends advanced_testcase {
     /**
      * A CATquiz activity with a finished attempt of a participant.

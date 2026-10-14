@@ -319,9 +319,9 @@ final class result_provider_test extends advanced_testcase {
     }
 
     /**
-     * Not finalised, no primary scale, two valid primary scales: no gradable score.
+     * Not finalised, no stored result, no result for the global scale: no gradable score.
      */
-    public function test_attempts_without_a_unique_valid_primary_scale(): void {
+    public function test_attempts_without_a_global_scale_result(): void {
         global $DB;
         $this->resetAfterTest();
         $this->activity(-4, 4);
@@ -336,20 +336,111 @@ final class result_provider_test extends advanced_testcase {
         $catattemptid = (int) $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $attempt->id]);
         $DB->set_field('local_catquiz_attempts', 'endtime', time(), ['id' => $catattemptid]);
         $this->assertSame(
-            catquiz_result_provider::REASON_NO_PRIMARY,
+            catquiz_result_provider::REASON_NO_RESULT,
             $provider->get_attempt_result($this->adaptivequiz, $attempt)->reason
         );
 
-        foreach ([$this->scaleid, $this->scaleid + 1000] as $scaleid) {
-            $DB->insert_record('local_catquiz_personparams', (object) [
-                'attemptid' => $catattemptid, 'userid' => $this->user->id, 'contextid' => 9, 'catscaleid' => $scaleid,
-                'ability' => 0.5, 'isprimary' => 1, 'isvalid' => 1, 'timecreated' => time(), 'timemodified' => time(),
-            ]);
-        }
+        // Only a subscale has a result - valid and primary, but not the global scale.
+        $DB->insert_record('local_catquiz_personparams', (object) [
+            'attemptid' => $catattemptid, 'userid' => $this->user->id, 'contextid' => 9, 'catscaleid' => $this->scaleid + 1000,
+            'ability' => 0.5, 'isprimary' => 1, 'isvalid' => 1, 'resultsource' => 'current', 'rangelower' => -4,
+            'rangeupper' => 4, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
         $this->assertSame(
-            catquiz_result_provider::REASON_AMBIGUOUS,
+            catquiz_result_provider::REASON_NO_GLOBAL,
             $provider->get_attempt_result($this->adaptivequiz, $attempt)->reason
         );
+    }
+
+    /**
+     * Graded on the global scale (decision of 2026-10-14), not on the scale a strategy reports first.
+     *
+     * The global scale is not the primary one - as with "lowest skill gap", which reports a subscale -
+     * or its reporting is switched off: it is graded all the same. A subscale's verdict plays no part.
+     * A global scale that is statistically invalid gives no grade, however good the subscale.
+     *
+     * @return array
+     */
+    public static function global_scale_verdicts(): array {
+        return [
+            'valid and primary' => [1, '', 0.5, 4, 56.25, null],
+            'not primary' => [0, 'not_primary', -1.0, 1, 37.5, null],
+            'not primary, not reported, hidden' => [0, 'not_primary,reporting_disabled,hidden', 2.0, 1, 75.0, null],
+            'standard error too large' => [0, 'se_max,not_primary', 2.0, 1, null, 'se_max'],
+            'below the minimum' => [0, 'min_questions_not_reached', 2.0, 1, null, 'min_questions_not_reached'],
+            'rejected without a reason' => [0, '', 2.0, 1, null, catquiz_result_provider::REASON_INVALID],
+        ];
+    }
+
+    /**
+     * The verdict on the global scale decides.
+     *
+     * @param int $isvalid
+     * @param string $status
+     * @param float $ability
+     * @param int $subscalevalid The verdict on the subscale, which must not matter.
+     * @param float|null $grade
+     * @param string|null $reason
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('global_scale_verdicts')]
+    public function test_graded_on_the_global_scale(
+        int $isvalid,
+        string $status,
+        float $ability,
+        int $subscalevalid,
+        ?float $grade,
+        ?string $reason
+    ): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity(-4, 4);
+        $attempt = $this->complete($this->attempt(1.2));
+        $catattemptid = (int) $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $attempt->id]);
+        $DB->delete_records('local_catquiz_personparams', ['attemptid' => $catattemptid]);
+        $rows = [
+            [$this->scaleid, $ability, $isvalid, $status, $isvalid],
+            [$this->scaleid + 1000, -3.5, $subscalevalid, $subscalevalid ? '' : 'se_max', 1],
+        ];
+        foreach ($rows as [$scaleid, $value, $valid, $validationstatus, $primary]) {
+            $DB->insert_record('local_catquiz_personparams', (object) [
+                'attemptid' => $catattemptid, 'userid' => $this->user->id, 'contextid' => 9, 'catscaleid' => $scaleid,
+                'ability' => $value, 'isprimary' => $primary, 'isvalid' => $valid, 'validationstatus' => $validationstatus,
+                'resultsource' => 'current', 'rangelower' => -4, 'rangeupper' => 4,
+                'timecreated' => time(), 'timemodified' => time(),
+            ]);
+        }
+
+        result_service::regrade($this->adaptivequiz, [(int) $attempt->id]);
+
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attempt->id]);
+        if ($grade === null) {
+            $this->assertEquals(0, $attempt->resultvalid);
+            $this->assertSame($reason, $attempt->resultreason);
+            $this->assertNull($this->grade());
+        } else {
+            $this->assertEquals(1, $attempt->resultvalid);
+            $this->assertEqualsWithDelta($ability, (float) $attempt->resultscore, 1e-9);
+            $this->assertEqualsWithDelta($grade, $this->grade(), 1e-3);
+        }
+    }
+
+    /**
+     * The global scale is the one the attempt was finalised on, not the one the test names today.
+     */
+    public function test_global_scale_of_the_attempt(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity(-4, 4);
+        $attempt = $this->complete($this->attempt(1.2));
+        $catattemptid = (int) $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $attempt->id]);
+        $this->assertEquals($this->scaleid, $DB->get_field('local_catquiz_attempts', 'scaleid', ['id' => $catattemptid]));
+
+        // The test is switched to another scale afterwards.
+        $DB->set_field('local_catquiz_tests', 'catscaleid', $this->scaleid + 1000, ['componentid' => $this->adaptivequiz->id]);
+
+        $result = (new catquiz_result_provider())->get_attempt_result($this->adaptivequiz, $attempt);
+        $this->assertTrue($result->valid);
+        $this->assertEqualsWithDelta(1.2, $result->score, 1e-4);
     }
 
     /**

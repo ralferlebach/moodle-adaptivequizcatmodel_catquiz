@@ -38,8 +38,8 @@ use stdClass;
  * Tests the callbacks exposed in lib.php.
  *
  * @package    adaptivequizcatmodel_catquiz
- * @covers ::adaptivequizcatmodel_catquiz_attempts_report_url
  */
+#[\PHPUnit\Framework\Attributes\CoversFunction('adaptivequizcatmodel_catquiz_attempts_report_url')]
 final class lib_test extends advanced_testcase {
     /**
      * The attempts report callback is discoverable under the expected name.

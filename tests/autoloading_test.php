@@ -32,6 +32,7 @@
 
 namespace adaptivequizcatmodel_catquiz;
 
+use adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration;
 use advanced_testcase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -40,8 +41,8 @@ use RecursiveIteratorIterator;
  * Tests that the namespace of every class matches its location.
  *
  * @package    adaptivequizcatmodel_catquiz
- * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(catquiz_item_administration::class)]
 final class autoloading_test extends advanced_testcase {
     /**
      * Every class under classes/ must be autoloadable.

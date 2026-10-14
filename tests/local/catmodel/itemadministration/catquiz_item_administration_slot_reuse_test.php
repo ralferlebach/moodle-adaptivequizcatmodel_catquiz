@@ -48,8 +48,8 @@ use stdClass;
  * Tests the slot reuse of the item administration.
  *
  * @package    adaptivequizcatmodel_catquiz
- * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
+#[\PHPUnit\Framework\Attributes\CoversClass(catquiz_item_administration::class)]
 final class catquiz_item_administration_slot_reuse_test extends advanced_testcase {
     /**
      * Builds a usage holding one started, unanswered question.
