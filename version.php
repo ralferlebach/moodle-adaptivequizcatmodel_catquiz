@@ -24,12 +24,13 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026100901;
+$plugin->version = 2026100902;
 $plugin->release = '1.0.4';
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->requires = 2024100700;
 $plugin->component = 'adaptivequizcatmodel_catquiz';
 $plugin->dependencies = [
-    // 2026100902 brings the result contract (mod_adaptivequiz issue #14), which this subplugin implements.
-    'mod_adaptivequiz' => 2026100902,
+    // 2026100902 brings the result contract (mod_adaptivequiz issue #14), which this subplugin implements;
+    // 2026100905 the stop codes of issue #20, which this subplugin hands over.
+    'mod_adaptivequiz' => 2026100905,
 ];

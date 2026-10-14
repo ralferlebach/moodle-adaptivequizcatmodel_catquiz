@@ -1,5 +1,17 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026100902
+
+- Issue #137 (CATquiz): Der Ergebnisbereich kommt aus dem beim Finalisieren eingefrorenen Bereich
+  (`rangelower`/`rangeupper` der Personenparameter), nie aus der heutigen Skala. Fehlt er (Versuch vor
+  CATquiz 2026100913 finalisiert), ist das Ergebnis ungültig mit Grund `range_not_recorded`; es wird
+  kein Bereich erfunden.
+- mod_adaptivequiz #20: Endet CATquiz einen Test, gibt der Adapter neben der Meldung den Grund als
+  Code weiter (`local\catmodel\stop_code`): Maximum, Zielgenauigkeit (auch „Schätzung stabil“),
+  keine passenden Fragen, Zeitlimit, technischer Fehler; unbekannte Status behalten ihren Namen
+  und erhalten auf der Ergebnisseite einen neutralen Hinweis. Ein älteres CATquiz ohne Status
+  liefert keinen Code.
+
 ## Interne Version 2026100901
 
 - Issue #7: CATquiz als Ergebnisquelle im Ergebnisvertrag der Aktivität (mod_adaptivequiz #14):
