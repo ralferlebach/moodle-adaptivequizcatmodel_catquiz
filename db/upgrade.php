@@ -54,5 +54,34 @@ function xmldb_adaptivequizcatmodel_catquiz_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2025090500, 'adaptivequizcatmodel', 'catquiz');
     }
 
+    if ($oldversion < 2026100903) {
+        // Local_catquiz #137: the protocol of cli/recover_legacy_results.php.
+        $table = new xmldb_table('adaptivequiz_cat_recovery');
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->add_field('attemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('instanceid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('catattemptid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('starttime', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('cutoff', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL);
+        $table->add_field('oldreason', XMLDB_TYPE_CHAR, '255');
+        $table->add_field('steps', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL);
+        $table->add_field('globalscaleid', XMLDB_TYPE_INTEGER, '10');
+        $table->add_field('rangelower', XMLDB_TYPE_NUMBER, '10, 5');
+        $table->add_field('rangeupper', XMLDB_TYPE_NUMBER, '10, 5');
+        $table->add_field('rangesource', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, '');
+        $table->add_field('valid', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('newreason', XMLDB_TYPE_CHAR, '255');
+        $table->add_field('resultpercent', XMLDB_TYPE_NUMBER, '10, 5');
+        $table->add_field('codeversion', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_index('attemptid', XMLDB_INDEX_UNIQUE, ['attemptid']);
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_plugin_savepoint(true, 2026100903, 'adaptivequizcatmodel', 'catquiz');
+    }
+
     return true;
 }

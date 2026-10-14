@@ -10,4 +10,4 @@
 /.gitignore             export-ignore
 /.gitattributes         export-ignore
 /erpnext.yml            export-ignore
-/cli/	export-ignore
+# cli/recover_legacy_results.php is an operations tool and is shipped (local_catquiz #137).

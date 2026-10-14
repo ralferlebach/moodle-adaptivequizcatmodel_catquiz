@@ -1,5 +1,25 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026100903
+
+- **Bewertung auf der Globalskala** (Entscheidung vom 14.10.2026): Die Note ist das Ergebnis der
+  Globalskala des Versuchs – der Testskala, auf der CATquiz ihn finalisiert hat –, nicht mehr das der
+  Skala, die eine Strategie zuerst berichtet. Bewertbar ist sie, wenn sie statistisch gültig und gemessen
+  ist; „nicht primär“, „Bericht abgeschaltet“ und „verborgen“ stehen dem nicht im Weg. Damit folgt auch die
+  Abschlussregel „gültiges Ergebnis“ der Globalskala. Neue Gründe: `no_stored_result` (kein Ergebnis je
+  Versuch gespeichert), `global_scale_missing`. Tests: `result_provider_test` (Globalskala, 6 Urteile;
+  Globalskala des Versuchs statt der heutigen Testskala).
+- **Recovery älterer Ergebnisse** (local_catquiz #137, Konzept „Legacy-Recovery“ vom 14.10.2026):
+  `cli/recover_legacy_results.php --since=YYYY-MM-DD [--execute] [--attemptid=N] [--csv=DATEI]`, ohne
+  `--execute` immer Probelauf. Triage: schon rekonstruiert, kein CAT-Versuch, vor dem Stichtag gestartet
+  (`starttime`; leer = davor), nie beendet, keine gespeicherten Antworten → unverändert. Sonst: nach
+  heutigen Regeln aus den Antworten beurteilt (`attempt_revalidator`), fehlender Bereich = heutiger Bereich
+  der Skala, markiert; danach Snapshot und Gradebook über die Kette des Hosts. Jeder rekonstruierte Versuch
+  wird in der neuen Tabelle `adaptivequiz_cat_recovery` protokolliert (alter Grund, Schritte, Bereich und
+  Herkunft, Urteil, neuer Grund, Prozent, Code-Version); ein zweiter Lauf überspringt ihn. Das CLI wird
+  ausgeliefert (`.gitattributes`). Tests: `local/recovery/legacy_result_recovery_test` (12 Fälle, u. a.
+  4/12, Stichtag, Probelauf ändert nichts, Wiederholung ändert nichts).
+
 ## Interne Version 2026100902
 
 - Issue #137 (CATquiz): Der Ergebnisbereich kommt aus dem beim Finalisieren eingefrorenen Bereich

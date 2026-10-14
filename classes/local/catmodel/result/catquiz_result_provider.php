@@ -27,12 +27,15 @@ use stdClass;
  * The results of a CATquiz test, for the gradebook of the activity (issue #7).
  *
  * The only place where CATquiz results are translated into the host's result contract
- * (mod_adaptivequiz issue #14). The score is the ability of the primary scale as the finaliser
- * filed it for this attempt, with CATquiz's own verdict on its validity - not the current person
- * parameters, which later attempts overwrite, and never the host's measure, which CATquiz does not
- * maintain. The range is the ability range of the scale as CATquiz froze it with the result when it
- * finalised the attempt (local_catquiz #137), so a later change of the scale does not change what
- * the attempt was worth - not even when the host takes its snapshot again.
+ * (mod_adaptivequiz issue #14). The score is the ability of the attempt's global scale - the scale of
+ * the test when the attempt was finalised - as the finaliser filed it for this attempt (decision of
+ * 2026-10-14: graded on the global scale, not on the scale a strategy reports first). It is gradable
+ * when the global scale is statistically valid and measured; that it is not the reported scale, or
+ * not reported at all, does not stand in the way. Never the current person parameters, which later
+ * attempts overwrite, and never the host's measure, which CATquiz does not maintain. The range is the
+ * ability range of the scale as CATquiz froze it with the result when it finalised the attempt
+ * (local_catquiz #137), so a later change of the scale does not change what the attempt was worth -
+ * not even when the host takes its snapshot again.
  *
  * Gradebook and completion stay with the host: this class only reports.
  *
@@ -44,11 +47,23 @@ final class catquiz_result_provider implements result_provider {
     /** @var string The attempt has not been finalised by CATquiz. */
     public const REASON_NOT_FINALISED = 'not_finalised';
 
-    /** @var string The finalised attempt has no primary scale. */
+    /** @var string No result is stored for the finalised attempt (finalised before CATquiz stored one per attempt). */
+    public const REASON_NO_RESULT = 'no_stored_result';
+
+    /** @var string The attempt has a stored result, but none for its global scale. */
+    public const REASON_NO_GLOBAL = 'global_scale_missing';
+
+    /** @var string Snapshots taken before 2026-10-14: no primary scale. Kept for reading them. */
     public const REASON_NO_PRIMARY = 'no_primary_scale';
 
-    /** @var string The finalised attempt has more than one valid primary scale. */
+    /** @var string Snapshots taken before 2026-10-14: more than one valid primary scale. Kept for reading them. */
     public const REASON_AMBIGUOUS = 'primary_ambiguous';
+
+    /**
+     * @var string[] Reasons that say how a scale is shown, not how well it was measured. They do not
+     *      stand in the way of grading the global scale.
+     */
+    private const PRESENTATION_REASONS = ['not_primary', 'reporting_disabled', 'hidden'];
 
     /** @var string The primary scale has no range. */
     public const REASON_NO_RANGE = 'range_unavailable';
@@ -56,7 +71,7 @@ final class catquiz_result_provider implements result_provider {
     /** @var string The attempt was finalised before CATquiz recorded the range with the result. */
     public const REASON_RANGE_NOT_RECORDED = 'range_not_recorded';
 
-    /** @var string A primary scale that CATquiz rejected without naming a reason. */
+    /** @var string A global scale result that CATquiz rejected without naming a reason. */
     public const REASON_INVALID = 'invalid';
 
     /**
@@ -79,7 +94,7 @@ final class catquiz_result_provider implements result_provider {
     }
 
     /**
-     * The finalised result of the attempt's primary scale.
+     * The finalised result of the attempt's global scale.
      *
      * @param stdClass $adaptivequiz
      * @param stdClass $attempt adaptivequiz_attempt
@@ -88,30 +103,26 @@ final class catquiz_result_provider implements result_provider {
     public function get_attempt_result(stdClass $adaptivequiz, stdClass $attempt): attempt_result {
         global $DB;
 
-        $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attempt->id]);
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attempt->id], '*', IGNORE_MULTIPLE);
         if (!$catattempt || empty($catattempt->endtime)) {
             return attempt_result::invalid(self::REASON_NOT_FINALISED);
         }
 
-        $primaries = array_filter(
-            personparam_repository::get_for_attempt((int) $catattempt->id),
-            fn($row) => !empty($row->isprimary)
-        );
-        $valid = array_filter($primaries, fn($row) => !empty($row->isvalid) && is_numeric($row->ability));
-
-        if (count($valid) > 1) {
-            return attempt_result::invalid(self::REASON_AMBIGUOUS);
+        $rows = personparam_repository::get_for_attempt((int) $catattempt->id);
+        if (!$rows) {
+            return attempt_result::invalid(self::REASON_NO_RESULT);
         }
-        if (!$valid) {
-            if (!$primaries) {
-                return attempt_result::invalid(self::REASON_NO_PRIMARY);
-            }
-            ksort($primaries);
-            $reason = trim((string) reset($primaries)->validationstatus);
-            return attempt_result::invalid($reason !== '' ? $reason : self::REASON_INVALID);
+        $globalscaleid = !empty($catattempt->scaleid) ? (int) $catattempt->scaleid : self::scale_of($adaptivequiz);
+        $global = array_values(array_filter($rows, fn($row) => (int) $row->catscaleid === $globalscaleid));
+        if (!$global) {
+            return attempt_result::invalid(self::REASON_NO_GLOBAL);
         }
+        $row = $global[0];
 
-        $row = reset($valid);
+        $rejection = self::rejection($row);
+        if ($rejection !== null) {
+            return attempt_result::invalid($rejection);
+        }
         // Issue #137 (CATquiz): the range frozen when the attempt was finalised - never today's.
         if (!isset($row->rangelower, $row->rangeupper) || !is_numeric($row->rangelower) || !is_numeric($row->rangeupper)) {
             // Finalised before ranges were recorded: the range of that time is unknown, and none is invented.
@@ -119,6 +130,30 @@ final class catquiz_result_provider implements result_provider {
         }
 
         return attempt_result::valid((float) $row->ability, (float) $row->rangelower, (float) $row->rangeupper);
+    }
+
+    /**
+     * Why the stored result of a global scale is not gradable, or null when it is.
+     *
+     * Gradable: a numeric ability that CATquiz judged valid, or that it rejected only for how the scale
+     * is shown - not the scale a strategy reports first, reporting switched off, hidden.
+     *
+     * @param stdClass $row local_catquiz_personparams (ability, isvalid, validationstatus).
+     * @return string|null The reasons, comma separated.
+     */
+    public static function rejection(stdClass $row): ?string {
+        if (!is_numeric($row->ability ?? null)) {
+            return self::REASON_INVALID;
+        }
+        if (!empty($row->isvalid)) {
+            return null;
+        }
+        $reasons = array_values(array_filter(array_map('trim', explode(',', (string) ($row->validationstatus ?? '')))));
+        if (!$reasons) {
+            return self::REASON_INVALID;
+        }
+        $statistical = array_values(array_diff($reasons, self::PRESENTATION_REASONS));
+        return $statistical ? implode(',', $statistical) : null;
     }
 
     /**

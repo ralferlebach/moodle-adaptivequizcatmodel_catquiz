@@ -30,7 +30,11 @@ use MoodleQuickForm;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 final class mod_form_extension implements
-    catmodel_mod_form_modifier, catmodel_mod_form_validator, catmodel_mod_form_data_preprocessor {
+    catmodel_mod_form_data_preprocessor,
+    catmodel_mod_form_modifier,
+    catmodel_mod_form_validator
+{
+    /** @var int Maximum number of questions used when the activity sets no limit of its own. */
     public const UNLIMITED_QUESTIONS_FALLBACK = 1000;
 
     /**
@@ -57,7 +61,6 @@ final class mod_form_extension implements
         $defaultelementstodrop = ['startinglevel', 'stopingconditionshdr', 'minimumquestions', 'maximumquestions', 'standarderror',
             'questionpool', 'lowestlevel', 'highestlevel', 'questionselectionheading'];
         foreach ($defaultelementstodrop as $elementname) {
-
             if ($form->elementExists($elementname)) {
                 $form->removeElement($elementname);
             }
