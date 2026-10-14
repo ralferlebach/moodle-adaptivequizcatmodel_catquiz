@@ -352,44 +352,74 @@ final class result_provider_test extends advanced_testcase {
     }
 
     /**
-     * Graded on the global scale (decision of 2026-10-14), not on the scale a strategy reports first.
+     * The verdict on the global scale (decision of 2026-10-14): the criteria the test sets, applied to it.
      *
-     * The global scale is not the primary one - as with "lowest skill gap", which reports a subscale -
-     * or its reporting is switched off: it is graded all the same. A subscale's verdict plays no part.
-     * A global scale that is statistically invalid gives no grade, however good the subscale.
+     * Minimum questions per scale and of the test, maximum standard error, the fraction rule. The
+     * strategy's own verdict - not reported first, reporting off, hidden - plays no part, nor do the
+     * minimum standard error and the maximum number of questions.
      *
      * @return array
      */
     public static function global_scale_verdicts(): array {
+        $all = ['perscale' => 4, 'test' => 6, 'semax' => 0.5];
         return [
-            'valid and primary' => [1, '', 0.5, 4, 56.25, null],
-            'not primary' => [0, 'not_primary', -1.0, 1, 37.5, null],
-            'not primary, not reported, hidden' => [0, 'not_primary,reporting_disabled,hidden', 2.0, 1, 75.0, null],
-            'standard error too large' => [0, 'se_max,not_primary', 2.0, 1, null, 'se_max'],
-            'below the minimum' => [0, 'min_questions_not_reached', 2.0, 1, null, 'min_questions_not_reached'],
-            'rejected without a reason' => [0, '', 2.0, 1, null, catquiz_result_provider::REASON_INVALID],
+            'every criterion met' => [8, 0.4, 0.5, $all, null],
+            'the strategy reported a subscale' => [8, 0.4, 0.5, $all, null, 0, 'not_primary,reporting_disabled,hidden'],
+            'below the minimum per scale' => [3, 0.4, 0.5, $all, 'n_min,min_questions_not_reached'],
+            'below the minimum of the test' => [5, 0.4, 0.5, $all, 'min_questions_not_reached'],
+            'standard error too large' => [8, 0.6, 0.5, $all, 'se_max'],
+            'standard error unknown' => [8, null, 0.5, $all, 'se_max'],
+            'every answer right' => [8, 0.4, 1.0, $all, 'fraction_all_correct'],
+            'every answer wrong' => [8, 0.4, 0.0, $all, 'fraction_all_incorrect'],
+            'no criterion set' => [1, 3.0, 0.5, [], null],
+            'not measured' => [0, 0.4, null, [], 'not_measured_in_current_attempt'],
         ];
     }
 
     /**
-     * The verdict on the global scale decides.
+     * The criteria decide, whatever the strategy said.
      *
-     * @param int $isvalid
-     * @param string $status
-     * @param float $ability
-     * @param int $subscalevalid The verdict on the subscale, which must not matter.
-     * @param float|null $grade
-     * @param string|null $reason
+     * @param int $n
+     * @param float|null $se
+     * @param float|null $fraction
+     * @param array $criteria perscale, test, semax
+     * @param string|null $reason Null: gradable.
+     * @param int $isvalid The strategy's verdict.
+     * @param string $status The strategy's reasons.
      * @dataProvider global_scale_verdicts
      */
-    public function test_graded_on_the_global_scale(
-        int $isvalid,
-        string $status,
-        float $ability,
-        int $subscalevalid,
-        ?float $grade,
-        ?string $reason
+    public function test_verdict_on_the_global_scale(
+        int $n,
+        ?float $se,
+        ?float $fraction,
+        array $criteria,
+        ?string $reason,
+        int $isvalid = 1,
+        string $status = ''
     ): void {
+        $settings = (object) [
+            'maxquestionsscalegroup' => ['catquiz_minquestionspersubscale' => $criteria['perscale'] ?? 0],
+            'maxquestionsgroup' => (object) ['catquiz_minquestions' => $criteria['test'] ?? 0, 'catquiz_maxquestions' => 2],
+            'catquiz_standarderrorgroup' => [
+                'catquiz_standarderror_min' => 0.45,
+                'catquiz_standarderror_max' => $criteria['semax'] ?? '',
+            ],
+        ];
+        $row = (object) [
+            'ability' => 1.0, 'n' => $n, 'standarderror' => $se, 'fraction' => $fraction,
+            'isvalid' => $isvalid, 'validationstatus' => $status,
+        ];
+
+        $this->assertSame($reason, catquiz_result_provider::rejection($row, $settings));
+    }
+
+    /**
+     * From the stored result to the gradebook: the global scale's own N, standard error and fraction count.
+     *
+     * The strategy reported a subscale ("lowest skill gap") and marked the global scale "not primary" -
+     * graded all the same. A subscale's verdict plays no part.
+     */
+    public function test_graded_on_the_global_scale(): void {
         global $DB;
         $this->resetAfterTest();
         $this->activity(-4, 4);
@@ -397,13 +427,14 @@ final class result_provider_test extends advanced_testcase {
         $catattemptid = (int) $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $attempt->id]);
         $DB->delete_records('local_catquiz_personparams', ['attemptid' => $catattemptid]);
         $rows = [
-            [$this->scaleid, $ability, $isvalid, $status, $isvalid],
-            [$this->scaleid + 1000, -3.5, $subscalevalid, $subscalevalid ? '' : 'se_max', 1],
+            [$this->scaleid, -1.0, 0, 'not_primary', 8, 0.5],
+            [$this->scaleid + 1000, -3.5, 1, '', 8, 0.5],
         ];
-        foreach ($rows as [$scaleid, $value, $valid, $validationstatus, $primary]) {
+        foreach ($rows as [$scaleid, $value, $valid, $validationstatus, $n, $fraction]) {
             $DB->insert_record('local_catquiz_personparams', (object) [
                 'attemptid' => $catattemptid, 'userid' => $this->user->id, 'contextid' => 9, 'catscaleid' => $scaleid,
-                'ability' => $value, 'isprimary' => $primary, 'isvalid' => $valid, 'validationstatus' => $validationstatus,
+                'ability' => $value, 'isprimary' => $valid, 'isvalid' => $valid, 'validationstatus' => $validationstatus,
+                'n' => $n, 'standarderror' => 0.3, 'fraction' => $fraction,
                 'resultsource' => 'current', 'rangelower' => -4, 'rangeupper' => 4,
                 'timecreated' => time(), 'timemodified' => time(),
             ]);
@@ -412,15 +443,16 @@ final class result_provider_test extends advanced_testcase {
         result_service::regrade($this->adaptivequiz, [(int) $attempt->id]);
 
         $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attempt->id]);
-        if ($grade === null) {
-            $this->assertEquals(0, $attempt->resultvalid);
-            $this->assertSame($reason, $attempt->resultreason);
-            $this->assertNull($this->grade());
-        } else {
-            $this->assertEquals(1, $attempt->resultvalid);
-            $this->assertEqualsWithDelta($ability, (float) $attempt->resultscore, 1e-9);
-            $this->assertEqualsWithDelta($grade, $this->grade(), 1e-3);
-        }
+        $this->assertEquals(1, $attempt->resultvalid);
+        $this->assertEqualsWithDelta(-1.0, (float) $attempt->resultscore, 1e-9);
+        $this->assertEqualsWithDelta(37.5, $this->grade(), 1e-3);
+
+        // The same attempt with every answer of the global scale right: no grade, whatever the subscale.
+        $global = ['attemptid' => $catattemptid, 'catscaleid' => $this->scaleid];
+        $DB->set_field('local_catquiz_personparams', 'fraction', 1.0, $global);
+        result_service::regrade($this->adaptivequiz, [(int) $attempt->id]);
+        $this->assertSame('fraction_all_correct', $DB->get_field('adaptivequiz_attempt', 'resultreason', ['id' => $attempt->id]));
+        $this->assertNull($this->grade());
     }
 
     /**

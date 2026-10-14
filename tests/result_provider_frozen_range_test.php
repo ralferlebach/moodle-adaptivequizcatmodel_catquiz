@@ -49,6 +49,7 @@ final class result_provider_frozen_range_test extends advanced_testcase {
         $DB->insert_record('local_catquiz_personparams', (object) [
             'attemptid' => $catattemptid, 'userid' => 2, 'contextid' => 9, 'catscaleid' => $scaleid, 'ability' => 1.5,
             'isprimary' => 1, 'isvalid' => 1, 'resultsource' => 'current', 'validationstatus' => '',
+            'n' => 4, 'standarderror' => 0.3, 'fraction' => 0.5,
             'rangelower' => $lower, 'rangeupper' => $upper, 'timecreated' => time(), 'timemodified' => time(),
         ]);
         return [$scaleid, (object) ['id' => 1, 'catquiz_catscales' => $scaleid], $attempt];

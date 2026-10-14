@@ -68,7 +68,7 @@ function xmldb_adaptivequizcatmodel_catquiz_upgrade($oldversion) {
         $table->add_field('globalscaleid', XMLDB_TYPE_INTEGER, '10');
         $table->add_field('rangelower', XMLDB_TYPE_NUMBER, '10, 5');
         $table->add_field('rangeupper', XMLDB_TYPE_NUMBER, '10, 5');
-        $table->add_field('rangesource', XMLDB_TYPE_CHAR, '20', null, XMLDB_NOTNULL, null, '');
+        $table->add_field('rangesource', XMLDB_TYPE_CHAR, '20');
         $table->add_field('valid', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0');
         $table->add_field('newreason', XMLDB_TYPE_CHAR, '255');
         $table->add_field('resultpercent', XMLDB_TYPE_NUMBER, '10, 5');
@@ -81,6 +81,20 @@ function xmldb_adaptivequizcatmodel_catquiz_upgrade($oldversion) {
         }
 
         upgrade_plugin_savepoint(true, 2026100903, 'adaptivequizcatmodel', 'catquiz');
+    }
+
+    if ($oldversion < 2026100905) {
+        // A CHAR NOT NULL column with '' as default makes XMLDB print a debugging message
+        // on install, which moodle-plugin-ci treats as a failure. The source is empty for
+        // rows that never got a range, so the column may simply be NULL.
+        $table = new xmldb_table('adaptivequiz_cat_recovery');
+        $field = new xmldb_field('rangesource', XMLDB_TYPE_CHAR, '20', null, null, null, null, 'rangeupper');
+        if ($dbman->table_exists($table) && $dbman->field_exists($table, $field)) {
+            $dbman->change_field_notnull($table, $field);
+            $dbman->change_field_default($table, $field);
+        }
+
+        upgrade_plugin_savepoint(true, 2026100905, 'adaptivequizcatmodel', 'catquiz');
     }
 
     return true;
