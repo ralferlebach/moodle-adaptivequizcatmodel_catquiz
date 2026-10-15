@@ -17,6 +17,7 @@
 namespace adaptivequizcatmodel_catquiz\local\recovery;
 
 use adaptivequizcatmodel_catquiz\local\catmodel\result\catquiz_result_provider;
+use adaptivequizcatmodel_catquiz\task\recover_legacy_results;
 use advanced_testcase;
 use context_module;
 use mod_adaptivequiz\local\result\result_service;
@@ -28,6 +29,8 @@ global $CFG;
 require_once($CFG->dirroot . '/mod/adaptivequiz/locallib.php');
 require_once($CFG->dirroot . '/local/catquiz/tests/fixtures/measured_progress.php');
 require_once($CFG->libdir . '/gradelib.php');
+require_once($CFG->libdir . '/upgradelib.php');
+require_once($CFG->dirroot . '/mod/adaptivequiz/catmodel/catquiz/db/upgrade.php');
 
 /**
  * Recovery of older CATquiz results for the gradebook (local_catquiz #137, concept of 2026-10-14).
@@ -42,6 +45,8 @@ require_once($CFG->libdir . '/gradelib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 #[\PHPUnit\Framework\Attributes\CoversClass(legacy_result_recovery::class)]
+#[\PHPUnit\Framework\Attributes\CoversClass(recover_legacy_results::class)]
+#[\PHPUnit\Framework\Attributes\CoversFunction('xmldb_adaptivequizcatmodel_catquiz_upgrade')]
 final class legacy_result_recovery_test extends advanced_testcase {
     /** @var int The cutoff of every run: 14 July 2026. */
     private const CUTOFF = 1783980000;
@@ -455,5 +460,233 @@ final class legacy_result_recovery_test extends advanced_testcase {
         $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $fields['class']);
         $this->assertSame('revalidated,range_from_current_scale', $fields['steps']);
         $this->assertNotEmpty($first->id);
+    }
+
+    /**
+     * Gives the attempt a question usage with this many slots, as the host leaves it.
+     *
+     * @param stdClass $attempt
+     * @param int $slots
+     * @return void
+     */
+    private function slots(stdClass $attempt, int $slots): void {
+        global $DB;
+        $context = \context_course::instance($this->course->id);
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category(['contextid' => $context->id]);
+        $quba = \question_engine::make_questions_usage_by_activity('mod_adaptivequiz', $context);
+        $quba->set_preferred_behaviour('deferredfeedback');
+        for ($i = 0; $i < $slots; $i++) {
+            $quba->add_question(\question_bank::load_question(
+                $generator->create_question('truefalse', null, ['category' => $category->id])->id
+            ));
+        }
+        $quba->start_all_questions();
+        \question_engine::save_questions_usage_by_activity($quba);
+        $DB->set_field('adaptivequiz_attempt', 'uniqueid', $quba->get_id(), ['id' => $attempt->id]);
+    }
+
+    /**
+     * Runs the queued ad-hoc tasks of a kind, without their output in the test log.
+     *
+     * @param string $class
+     * @return string The output.
+     */
+    private function run_tasks(string $class): string {
+        ob_start();
+        $this->runAdhocTasks($class);
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * Issue #8: the regular regrade of the activity keeps an invalid snapshot as it is - only the recovery
+     * takes it again.
+     */
+    public function test_regular_regrade_keeps_the_invalid_snapshot(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity();
+        $attempt = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
+
+        \mod_adaptivequiz\task\regrade_activity::queue((int) $this->adaptivequiz->id);
+        $this->run_tasks(\mod_adaptivequiz\task\regrade_activity::class);
+
+        $this->assertEquals($attempt, $DB->get_record('adaptivequiz_attempt', ['id' => $attempt->id]));
+        $this->assertNull($this->grade());
+
+        $this->run_recovery(true);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+    }
+
+    /**
+     * Issue #8: neither a historic no_primary_scale nor the primary flags of the stored rows decide - graded is
+     * the global scale.
+     */
+    public function test_primary_markings_do_not_gate_the_grade(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity();
+        $attempt = $this->legacy($this->attempt(self::CUTOFF + DAYSECS, ['sub' => -3.0]), 'range_not_recorded');
+        $catattemptid = $this->catattemptid($attempt);
+        $DB->set_field('adaptivequiz_attempt', 'resultreason', catquiz_result_provider::REASON_NO_PRIMARY, ['id' => $attempt->id]);
+        $rows = ['attemptid' => $catattemptid];
+        $DB->set_field('local_catquiz_personparams', 'isprimary', 0, $rows + ['catscaleid' => $this->scaleid]);
+        $DB->set_field('local_catquiz_personparams', 'isprimary', 1, $rows + ['catscaleid' => $this->subscaleid]);
+
+        $run = $this->run_recovery(true);
+
+        $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $run->rows[$attempt->id]->class);
+        $this->assertSame(catquiz_result_provider::REASON_NO_PRIMARY, $run->rows[$attempt->id]->oldreason);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3, 'The global scale (1.2 on -4..4), not the subscale.');
+    }
+
+    /**
+     * Production regression 33/25: more items administered than the maximum - invalid, no grade, also in the
+     * dry run.
+     */
+    public function test_more_items_than_the_maximum_gives_no_grade(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity();
+        $attempt = $this->attempt(self::CUTOFF + DAYSECS, ['n' => 25]);
+        $this->slots($attempt, 33);
+        $attempt = $this->legacy($attempt, 'no_stored_result');
+
+        $dry = $this->run_recovery(false);
+        $run = $this->run_recovery(true);
+
+        foreach ([$dry, $run] as $report) {
+            $this->assertSame(legacy_result_recovery::RECOVERED_INVALID, $report->rows[$attempt->id]->class);
+            $this->assertStringContainsString('max_questions_exceeded', $report->rows[$attempt->id]->newreason);
+        }
+        $this->assertNull($this->grade());
+        $this->assertNull($DB->get_field('adaptivequiz_attempt', 'resultpercent', ['id' => $attempt->id]));
+    }
+
+    /**
+     * The maximum itself is a regular end: 25 slots at a maximum of 25 are graded.
+     */
+    public function test_items_at_the_maximum_are_graded(): void {
+        $this->resetAfterTest();
+        $this->activity();
+        $attempt = $this->attempt(self::CUTOFF + DAYSECS, ['n' => 25]);
+        $this->slots($attempt, 25);
+        $attempt = $this->legacy($attempt, 'no_stored_result');
+
+        $run = $this->run_recovery(true);
+
+        $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $run->rows[$attempt->id]->class);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+    }
+
+    /**
+     * An error with one activity is reported for its attempts; the others are graded, and a later run tries
+     * the failed ones again.
+     */
+    public function test_an_error_does_not_stop_the_others(): void {
+        global $DB;
+        $this->preventResetByRollback();
+        $this->resetAfterTest();
+        $this->activity();
+        $broken = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
+        $brokenactivity = $this->adaptivequiz;
+        $this->activity();
+        $sound = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
+        // The grade item of the first activity cannot be written: its course is gone.
+        $course = $DB->get_record('course', ['id' => $brokenactivity->course]);
+        $DB->delete_records('course', ['id' => $course->id]);
+
+        $run = $this->run_recovery(true);
+
+        $this->assertSame(legacy_result_recovery::FAILED, $run->rows[$broken->id]->class);
+        $this->assertNotEmpty($run->rows[$broken->id]->newreason);
+        $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $run->rows[$sound->id]->class);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+        $this->assertFalse($DB->record_exists('adaptivequiz_cat_recovery', ['attemptid' => $broken->id]));
+        $this->assertNull(
+            $DB->get_field('adaptivequiz_attempt', 'resultpercent', ['id' => $broken->id]),
+            'Nothing of the failed grading is kept.'
+        );
+        $this->assertFalse($DB->is_transaction_started(), 'No transaction is left open.');
+
+        $DB->import_record('course', $course);
+        $again = $this->run_recovery(true);
+        $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $again->rows[$broken->id]->class);
+        $this->assertArrayNotHasKey($sound->id, $again->rows, 'Graded once: no candidate any more.');
+        $this->assertSame(1, $DB->count_records('adaptivequiz_cat_recovery', ['attemptid' => $sound->id]));
+    }
+
+    /**
+     * Issue #8, end to end: the upgrade queues the migration once; the task recovers a mixed stock - valid,
+     * 4/12, 33/25, not finalised, before the window - by the same classes as the dry run of the CLI, and the
+     * gradebook gets the valid one only. A second run of the task changes nothing.
+     */
+    public function test_upgrade_queues_the_migration_once_and_it_recovers_the_stock(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity();
+        // 00:00 in the server's time zone; with the site in Germany that is the cutoff of every test here.
+        $this->setTimezone('Europe/Berlin');
+        $cutoff = legacy_result_recovery::cutoff(legacy_result_recovery::MIGRATION_SINCE);
+        $this->assertSame(self::CUTOFF, $cutoff, 'The window of the migration is fixed.');
+        $valid = $this->legacy($this->attempt($cutoff + DAYSECS), 'range_not_recorded');
+        $belowmin = $this->legacy($this->attempt($cutoff + DAYSECS, ['n' => 4, 'minquestions' => 12]), 'no_stored_result');
+        $abovemax = $this->attempt($cutoff + DAYSECS, ['n' => 25]);
+        $this->slots($abovemax, 33);
+        $abovemax = $this->legacy($abovemax, 'no_stored_result');
+        $notfinalised = $this->legacy($this->attempt($cutoff + DAYSECS), 'not_finalised');
+        $before = $this->legacy($this->attempt($cutoff - 1), 'range_not_recorded');
+        $expected = [
+            $valid->id => legacy_result_recovery::RECOVERED_VALID,
+            $belowmin->id => legacy_result_recovery::RECOVERED_INVALID,
+            $abovemax->id => legacy_result_recovery::RECOVERED_INVALID,
+            $notfinalised->id => legacy_result_recovery::NOT_FINALISED,
+            $before->id => legacy_result_recovery::OUTSIDE_WINDOW,
+        ];
+        $dry = (new legacy_result_recovery($cutoff, false))->run();
+        $this->assertEquals($expected, array_map(fn($row) => $row->class, $dry->rows), 'The dry run of the CLI.');
+
+        // The upgrade step, as from 2026100905.
+        global $CFG;
+        set_config('version', 2026100905, 'adaptivequizcatmodel_catquiz');
+        $this->assertTrue(xmldb_adaptivequizcatmodel_catquiz_upgrade(2026100905));
+        $this->assertEquals(2026100906, get_config('adaptivequizcatmodel_catquiz', 'version'));
+        // The savepoint marks the site as upgrading; the upgrade is over before cron runs the task.
+        unset_config('upgraderunning');
+        unset($CFG->upgraderunning);
+        $queued = \core\task\manager::get_adhoc_tasks(recover_legacy_results::class);
+        $this->assertCount(1, $queued, 'The upgrade queued the migration.');
+        recover_legacy_results::queue_migration();
+        $this->assertCount(1, \core\task\manager::get_adhoc_tasks(recover_legacy_results::class), 'Queued once.');
+        $this->assertSame($cutoff, (int) reset($queued)->get_custom_data()->cutoff);
+        $this->assertNull($this->grade(), 'The upgrade itself grades nothing.');
+
+        $output = $this->run_tasks(recover_legacy_results::class);
+
+        $this->assertStringContainsString('recovered_valid', $output);
+        foreach ($expected as $attemptid => $class) {
+            $protocolled = $DB->get_record('adaptivequiz_cat_recovery', ['attemptid' => $attemptid]);
+            if ($class === legacy_result_recovery::RECOVERED_VALID || $class === legacy_result_recovery::RECOVERED_INVALID) {
+                $this->assertNotFalse($protocolled, "Attempt $attemptid is protocolled.");
+                $this->assertEquals($class === legacy_result_recovery::RECOVERED_VALID ? 1 : 0, $protocolled->valid);
+                $this->assertEquals($cutoff, $protocolled->cutoff);
+            } else {
+                $this->assertFalse($protocolled, "Attempt $attemptid is left alone.");
+            }
+        }
+        $protocol = $DB->get_record('adaptivequiz_cat_recovery', ['attemptid' => $valid->id]);
+        $this->assertSame(legacy_result_recovery::RANGE_CURRENT, $protocol->rangesource);
+        $this->assertEquals($this->scaleid, $protocol->globalscaleid);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3, 'Last attempt with a valid result: the valid one.');
+        foreach ([$belowmin, $abovemax, $notfinalised, $before] as $attempt) {
+            $this->assertNull($DB->get_field('adaptivequiz_attempt', 'resultpercent', ['id' => $attempt->id]));
+        }
+
+        // Once more - a retry, say: nothing changes.
+        $protocols = $DB->get_records('adaptivequiz_cat_recovery', null, 'id');
+        recover_legacy_results::queue_migration();
+        $this->run_tasks(recover_legacy_results::class);
+        $this->assertEquals($protocols, $DB->get_records('adaptivequiz_cat_recovery', null, 'id'));
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
     }
 }

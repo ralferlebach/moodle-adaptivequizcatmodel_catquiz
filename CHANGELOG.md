@@ -1,5 +1,27 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026100906
+
+- Issue #8: Ältere CATquiz-Versuche mit ungültigem Snapshot wurden durch kein Upgrade und keinen Regrade
+  neu bewertet. Ursache: Der Regrade der Aktivität nimmt vorhandene Snapshots bewusst nicht neu, und
+  `snapshot_results` bearbeitet nur fehlende Snapshots. Die Recovery gab es bisher nur per CLI.
+  - Das Upgrade auf 2026100906 stellt einmal den Ad-hoc-Task `task\recover_legacy_results` ein. Er führt
+    die vorhandene `legacy_result_recovery` aus, mit festem Stichtag
+    `legacy_result_recovery::MIGRATION_SINCE` = 14.07.2026 (Startzeit des CAT-Versuchs, 00:00 in der
+    Zeitzone des Servers). Der normale Regrade bleibt unverändert.
+  - Bewertet wird nur die Globalskala. `isprimary` und ein alter Grund `no_primary_scale` spielen keine
+    Rolle. Bei `range_not_recorded` gilt der heutige Bereich der Globalskala, im Protokoll als
+    `current_scale` ausgewiesen.
+  - Neu: Mehr gestellte Fragen als das Maximum (33/25) sind ungültig (`max_questions_exceeded`, aus der
+    zentralen Validierung von local_catquiz 2026100922/2026100923).
+  - Robustheit: Ein Fehler bei einem Versuch oder einer Aktivität stoppt die übrigen nicht und steht im
+    Task-Log. Snapshot, Note und Protokoll einer Aktivität werden gemeinsam geschrieben oder gar nicht.
+    Ein Versuch, den die Neubeurteilung gültig gesetzt hat und dessen Snapshot noch keinen Prozentwert
+    hat, bleibt Kandidat.
+  - CLI und Task lesen den Stichtag gleich (`legacy_result_recovery::cutoff()`).
+  - Tests: `legacy_result_recovery_test` +6, darunter der Weg Upgrade → Task → Gradebook mit gemischtem
+    Bestand.
+
 ## Interne Version 2026100905
 
 - CI-Fix: Die Spalte `rangesource` der Recovery-Tabelle `adaptivequiz_cat_recovery` war CHAR NOT NULL mit

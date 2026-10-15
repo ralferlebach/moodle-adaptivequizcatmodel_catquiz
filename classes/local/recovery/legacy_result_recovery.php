@@ -30,7 +30,8 @@ use stdClass;
  *
  * Triage, recovery, validation and grading, in that order and strictly apart:
  *
- * 1. Triage. Candidates are completed attempts of CATquiz activities without a valid result snapshot.
+ * 1. Triage. Candidates are completed attempts of CATquiz activities without a valid result snapshot
+ *    (also one a revalidation marked valid when the grading after it failed: valid, but no percentage).
  *    An attempt is left as it is when it was recovered before, has no CAT attempt, started before the
  *    cutoff (local_catquiz_attempts.starttime; none counts as before), was never finalised by CATquiz,
  *    or has no stored answers (progress) to be judged from.
@@ -43,7 +44,12 @@ use stdClass;
  *
  * Without $execute nothing is written: the run reports what the recovery would do, attempt by attempt.
  * Every recovered attempt is protocolled in adaptivequiz_cat_recovery, which a later run skips - so a
- * second run changes nothing.
+ * second run changes nothing. An error with one attempt, or one activity, is reported for it (FAILED) and
+ * the run goes on with the others; nothing of the failed attempt is kept, and a later run tries it again.
+ *
+ * Two ways in, one recovery: cli/recover_legacy_results.php (dry run, diagnosis, by hand) and the one-off
+ * migration the upgrade to 2026100906 queues (task\recover_legacy_results, issue #8) for the window
+ * MIGRATION_SINCE.
  *
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -90,6 +96,28 @@ final class legacy_result_recovery {
     private const TABLE = 'adaptivequiz_cat_recovery';
 
     /**
+     * @var string Start of the window of the one-off migration (issue #8): attempts started from this day on,
+     *      00:00 in the server's time zone. Fixed, not "three months back from now", so that the migration is
+     *      reproducible: three months before the recovery was written (concept of 2026-10-14).
+     */
+    public const MIGRATION_SINCE = '2026-07-14';
+
+    /**
+     * The cutoff of a window that starts on a day: 00:00 in the server's time zone.
+     *
+     * @param string $date YYYY-MM-DD
+     * @return int Unix time
+     * @throws \invalid_parameter_exception For anything but a date YYYY-MM-DD.
+     */
+    public static function cutoff(string $date): int {
+        $since = \DateTime::createFromFormat('!Y-m-d', $date, \core_date::get_server_timezone_object());
+        if (!$since || $since->format('Y-m-d') !== $date) {
+            throw new \invalid_parameter_exception("A date YYYY-MM-DD, not '$date'.");
+        }
+        return $since->getTimestamp();
+    }
+
+    /**
      * The recovery.
      *
      * @param int $cutoff Unix time; attempts that started earlier are left as they are.
@@ -116,7 +144,10 @@ final class legacy_result_recovery {
 
         $report = (object) ['counts' => array_fill_keys(self::CLASSES, 0), 'graded' => 0, 'rows' => []];
         $params = ['state' => 'complete', 'model' => 'catquiz'];
-        $where = "a.attemptstate = :state AND q.catmodel = :model AND COALESCE(a.resultvalid, 0) = 0";
+        // Without a valid result snapshot: not valid, or marked valid by a revalidation whose grading failed
+        // (a snapshot without a percentage) - such an attempt is taken on again, not lost.
+        $where = "a.attemptstate = :state AND q.catmodel = :model
+                  AND (COALESCE(a.resultvalid, 0) = 0 OR (a.resultpercent IS NULL AND a.resulttime IS NOT NULL))";
         if ($this->attemptid !== null) {
             $where .= ' AND a.id = :attemptid';
             $params['attemptid'] = $this->attemptid;
@@ -142,7 +173,29 @@ final class legacy_result_recovery {
 
         if ($this->execute) {
             foreach ($byinstance as $instanceid => $attemptids) {
-                $this->grade($instanceid, $attemptids, $report);
+                // Snapshots, grades and protocol of an activity together, or none of them: an attempt whose
+                // grading failed keeps no snapshot that would hide it from a later run.
+                $transaction = $DB->start_delegated_transaction();
+                try {
+                    $this->grade($instanceid, $attemptids, $report);
+                    $transaction->allow_commit();
+                } catch (\Throwable $e) {
+                    try {
+                        $transaction->rollback($e);
+                    } catch (\Throwable $rethrown) {
+                        // The rollback hands the error back; it is reported below.
+                        unset($rethrown);
+                    }
+                    // The other activities are graded all the same; these attempts are tried again later.
+                    foreach ($attemptids as $attemptid) {
+                        $report->rows[$attemptid]->class = self::FAILED;
+                        $report->rows[$attemptid]->newreason = $e->getMessage();
+                    }
+                }
+            }
+            $report->counts = array_fill_keys(self::CLASSES, 0);
+            foreach ($report->rows as $each) {
+                $report->counts[$each->class]++;
             }
         }
         $report->graded = count(array_filter($report->rows, fn($row) => $row->class === self::RECOVERED_VALID));
@@ -334,10 +387,6 @@ final class legacy_result_recovery {
                 'codeversion' => $version,
                 'timecreated' => time(),
             ]);
-        }
-        $report->counts = array_fill_keys(self::CLASSES, 0);
-        foreach ($report->rows as $each) {
-            $report->counts[$each->class]++;
         }
     }
 

@@ -97,5 +97,15 @@ function xmldb_adaptivequizcatmodel_catquiz_upgrade($oldversion) {
         upgrade_plugin_savepoint(true, 2026100905, 'adaptivequizcatmodel', 'catquiz');
     }
 
+    if ($oldversion < 2026100906) {
+        // Issue #8: older CATquiz attempts whose snapshot holds no valid result keep it - the regular
+        // regrade does not take snapshots again. The recovery of cli/recover_legacy_results.php takes
+        // them on once, for the window legacy_result_recovery::MIGRATION_SINCE, as an ad-hoc task: the
+        // upgrade itself only queues it.
+        \adaptivequizcatmodel_catquiz\task\recover_legacy_results::queue_migration();
+
+        upgrade_plugin_savepoint(true, 2026100906, 'adaptivequizcatmodel', 'catquiz');
+    }
+
     return true;
 }
