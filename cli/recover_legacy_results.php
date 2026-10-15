@@ -48,7 +48,8 @@ result is judged again from its answers by today's rules; a missing range is tak
 stands today and marked. Graded is the global scale. Recovered attempts are protocolled and skipped by
 a later run.
 
-  --since=YYYY-MM-DD   Required. Start of the window, 00:00 in the server's time zone.
+  --since=YYYY-MM-DD   Required. Start of the window, 00:00 in the server's time zone. The upgrade to
+                       2026100906 ran the recovery once with --since=2026-07-14 (task in the log).
   --execute            Write. Without it nothing is changed.
   --attemptid=N        Only this attempt (adaptivequiz_attempt.id).
   --csv=FILE           Write one line per candidate attempt to FILE.
@@ -60,13 +61,16 @@ if ($options['help'] || $unrecognised || $options['since'] === '') {
     cli_write($usage);
     exit($options['help'] ? 0 : 1);
 }
-$since = DateTime::createFromFormat('!Y-m-d', $options['since'], core_date::get_server_timezone_object());
-if (!$since || $since->format('Y-m-d') !== $options['since']) {
+try {
+    // The same reading of the date as the one-off migration (task\recover_legacy_results).
+    $cutoff = legacy_result_recovery::cutoff($options['since']);
+} catch (invalid_parameter_exception $e) {
     cli_error("--since must be a date YYYY-MM-DD, not '{$options['since']}'.");
 }
+$since = (new DateTime('@' . $cutoff))->setTimezone(core_date::get_server_timezone_object());
 
 $recovery = new legacy_result_recovery(
-    $since->getTimestamp(),
+    $cutoff,
     (bool) $options['execute'],
     $options['attemptid'] ? (int) $options['attemptid'] : null
 );
