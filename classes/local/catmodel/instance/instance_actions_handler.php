@@ -16,6 +16,7 @@
 
 namespace adaptivequizcatmodel_catquiz\local\catmodel\instance;
 
+use adaptivequizcatmodel_catquiz\local\attempt_cleanup;
 use local_catquiz\catquiz_handler;
 use mod_adaptivequiz\local\catmodel\instance\catmodel_add_instance_handler;
 use mod_adaptivequiz\local\catmodel\instance\catmodel_delete_instance_handler;
@@ -69,34 +70,7 @@ class instance_actions_handler implements
      * @param stdClass $adaptivequiz
      */
     public function delete_instance_callback(stdClass $adaptivequiz): void {
-        global $DB;
-        $DB->delete_records(
-            'local_catquiz_tests',
-            ['componentid' => $adaptivequiz->id, 'component' => 'mod_adaptivequiz']
-        );
-
-        $attemptids = $DB->get_fieldset_select(
-            'local_catquiz_attempts',
-            'attemptid',
-            'instanceid = :instanceid AND component = :component',
-            ['instanceid' => $adaptivequiz->id, 'component' => 'adaptivequiz']
-        );
-
-        // If there are no attempts to delete, we can return.
-        if (!$attemptids) {
-            return;
-        }
-
-        [$insql, $inparams] = $DB->get_in_or_equal($attemptids);
-        $DB->delete_records_select(
-            'local_catquiz_progress',
-            "attemptid {$insql}",
-            $inparams
-        );
-        $DB->delete_records_select(
-            'local_catquiz_attempts',
-            "attemptid {$insql}",
-            $inparams
-        );
+        // By the CAT attempts, both spellings of the component, before the activity deletes its attempts.
+        attempt_cleanup::delete_for_instance((int) $adaptivequiz->id);
     }
 }

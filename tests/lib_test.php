@@ -25,6 +25,7 @@
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers ::adaptivequizcatmodel_catquiz_attempts_report_url
+ * @covers ::adaptivequizcatmodel_catquiz_attempt_time_limit
  */
 
 namespace adaptivequizcatmodel_catquiz;
@@ -119,5 +120,39 @@ final class lib_test extends advanced_testcase {
         $withoutcatmodel->catmodel = '';
 
         $this->assertNull(attempts_number::when_custom_catmodel_in_use($withoutcatmodel, $cm)->reporturl);
+    }
+
+    /**
+     * The host's notice of an attempt that ran out of time names the test's limit (mod_adaptivequiz #20).
+     *
+     * @return void
+     */
+    public function test_attempt_time_limit_comes_from_the_test(): void {
+        global $CFG, $DB;
+        require_once($CFG->dirroot . '/mod/adaptivequiz/catmodel/catquiz/lib.php');
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $activity = $this->getDataGenerator()->create_module('adaptivequiz', ['course' => $course->id]);
+        $DB->set_field('adaptivequiz', 'catmodel', 'catquiz', ['id' => $activity->id]);
+        $adaptivequiz = $DB->get_record('adaptivequiz', ['id' => $activity->id]);
+        $settings = ['catquiz_timelimitgroup' => ['catquiz_maxtimeperattempt' => 45, 'catquiz_timeselect_attempt' => 'min']];
+        $testid = $DB->insert_record('local_catquiz_tests', (object) [
+            'name' => 'Test', 'component' => 'mod_adaptivequiz', 'componentid' => $activity->id, 'catscaleid' => 1,
+            'json' => json_encode($settings), 'status' => 0, 'parentid' => 0, 'courseid' => $course->id,
+            'usermodified' => 2, 'timecreated' => time(), 'timemodified' => time(),
+        ]);
+        $attemptid = $DB->insert_record('adaptivequiz_attempt', (object) [
+            'instance' => $activity->id, 'userid' => 2, 'uniqueid' => 77001, 'attemptstate' => 'complete',
+            'attemptstopcriteria' => '', 'questionsattempted' => 3, 'difficultysum' => 0, 'standarderror' => 0.3,
+            'measure' => 0, 'timecreated' => 1000, 'timemodified' => 1000 + 3 * HOURSECS, 'timefinished' => 1000 + 3 * HOURSECS,
+            'stopcode' => 'timelimit',
+        ]);
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attemptid]);
+
+        $this->assertSame(45 * MINSECS, adaptivequizcatmodel_catquiz_attempt_time_limit($adaptivequiz, $attempt));
+        $this->assertSame(45 * MINSECS, \mod_adaptivequiz\local\attempt\stop_reason::time_limit($adaptivequiz, $attempt));
+
+        $DB->set_field('local_catquiz_tests', 'json', json_encode([]), ['id' => $testid]);
+        $this->assertNull(adaptivequizcatmodel_catquiz_attempt_time_limit($adaptivequiz, $attempt), 'No limit set.');
     }
 }

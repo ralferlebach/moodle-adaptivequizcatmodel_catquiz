@@ -35,8 +35,60 @@ use mod_adaptivequiz\local\attempt;
  * @param attempt $attempt
  */
 function adaptivequizcatmodel_catquiz_post_create_attempt_callback(stdClass $adaptivequiz, attempt $attempt): void {
-        cat_model_params::create_new_for_attempt($attempt->get_attempt()->id);
-        catquiz_handler::prepare_attempt_caches();
+    // The share of this sub-plugin in the timeline of CATquiz, where it has one (adapter #6).
+    adaptivequizcatmodel_catquiz_span('adapter:post_create_attempt', function () use ($attempt) {
+        adaptivequizcatmodel_catquiz_span(
+            'adapter:create_new_for_attempt',
+            fn() => cat_model_params::create_new_for_attempt($attempt->get_attempt()->id)
+        );
+        // The attempt goes along (local_catquiz #146): only its own state is set up, the other attempts of
+        // the session keep theirs. An older CATquiz takes no argument and ignores it.
+        catquiz_handler::prepare_attempt_caches((int) $attempt->get_attempt()->id);
+    });
+}
+
+/**
+ * Runs a step inside a span of the CATquiz timeline - or just runs it, with an older CATquiz (adapter #6).
+ *
+ * @param string $name
+ * @param callable $fn
+ * @param array $meta
+ * @return mixed What the step returns.
+ */
+function adaptivequizcatmodel_catquiz_span(string $name, callable $fn, array $meta = []) {
+    $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
+    if (!class_exists($timeline)) {
+        return $fn();
+    }
+    return $timeline::span($name, $fn, $meta);
+}
+
+/**
+ * The attempt's time limit in seconds, for the host's notice of an attempt that ran out of time (mod_adaptivequiz #20).
+ *
+ * @param stdClass $adaptivequiz
+ * @param stdClass $attempt adaptivequiz_attempt record.
+ * @return int|null null when the test sets none.
+ */
+function adaptivequizcatmodel_catquiz_attempt_time_limit(stdClass $adaptivequiz, stdClass $attempt): ?int {
+    if (!method_exists(catquiz_handler::class, 'attempt_time_limit')) {
+        return null;
+    }
+    return catquiz_handler::attempt_time_limit((int) $attempt->id);
+}
+
+/**
+ * The time for one question of an attempt in seconds, for the host's resume dialog (mod_adaptivequiz #5).
+ *
+ * @param stdClass $adaptivequiz
+ * @param stdClass $attempt adaptivequiz_attempt record.
+ * @return int|null null when the test sets none.
+ */
+function adaptivequizcatmodel_catquiz_item_time_limit(stdClass $adaptivequiz, stdClass $attempt): ?int {
+    if (!method_exists(catquiz_handler::class, 'item_time_limit')) {
+        return null;
+    }
+    return catquiz_handler::item_time_limit((int) $attempt->id);
 }
 
 /**
@@ -142,4 +194,17 @@ function adaptivequizcatmodel_catquiz_completed_attempt_review_allowed(stdClass 
         return false;
     }
     return \local_catquiz\local\access\question_review::released_to_owner((int) $adaptivequiz->id);
+}
+
+/**
+ * Removes what local_catquiz keeps for a deleted attempt of the activity: the CAT attempt, its progress,
+ * its abilities and its trace.
+ *
+ * Called by the activity after it deleted the attempt (delattempt.php).
+ *
+ * @param stdClass $adaptivequiz The activity instance record.
+ * @param stdClass $attempt The attempt that was deleted.
+ */
+function adaptivequizcatmodel_catquiz_post_delete_attempt_callback(stdClass $adaptivequiz, stdClass $attempt): void {
+    \adaptivequizcatmodel_catquiz\local\attempt_cleanup::delete_for_host_attempts([(int) $attempt->id]);
 }
