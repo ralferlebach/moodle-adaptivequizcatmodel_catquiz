@@ -15,53 +15,59 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Backup subplugin class for catquiz
+ * Backup of what CATquiz keeps for an activity: its test settings and the files of its feedback texts.
  *
- * @package    catmodel_catquiz
+ * @package    adaptivequizcatmodel_catquiz
  * @copyright  2024 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class backup_adaptivequizcatmodel_catquiz_subplugin extends backup_subplugin {
     /**
-     * Define the subplugin structure
-     * @param string $connectionpoint
+     * Define the subplugin structure.
      *
+     * @param string $connectionpoint
      * @return backup_subplugin_element
      */
     public function define_subplugin_structure($connectionpoint) {
-        // Create XML elements.
+        global $DB;
+
         $subplugin = $this->get_subplugin_element();
         $subpluginwrapper = new backup_nested_element($this->get_recommended_name() . $connectionpoint);
         $subpluginelement = new backup_nested_element('catquiz_test', ['id'], [
-            // List all your subplugin's database fields here.
             'parentid',
             'componentid',
             'component',
             'catscaleid',
+            'contextid',
             'courseid',
             'name',
             'description',
             'descriptionformat',
             'json',
+            'status',
+            'timecreated',
+            'timemodified',
         ]);
 
-        // Build XML structure.
         $subplugin->add_child($subpluginwrapper);
         $subpluginwrapper->add_child($subpluginelement);
 
-        // Set sourece using custom SQL to get only the relevant row.
-        $sql = <<<SQL
-            SELECT *
-            FROM {local_catquiz_tests}
-            WHERE component = :component
-            AND componentid = :componentid
-        SQL;
+        $subpluginelement->set_source_sql(
+            'SELECT * FROM {local_catquiz_tests} WHERE component = :component AND componentid = :componentid',
+            ['component' => backup_helper::is_sqlparam('mod_adaptivequiz'), 'componentid' => backup::VAR_PARENTID]
+        );
 
-        $params = [
-            'component' => ['sqlparam' => 'mod_adaptivequiz'],
-            'componentid' => backup::VAR_PARENTID,
-        ];
-        $subpluginelement->set_source_sql($sql, $params);
+        // The images of the feedback texts: one file area per scale and range, item id = the activity.
+        // The areas exist only as far as texts have files, so they are looked up (adaptivequizcatmodel_catquiz #1).
+        $areas = $DB->get_fieldset_select(
+            'files',
+            'DISTINCT filearea',
+            "contextid = :contextid AND component = 'local_catquiz' AND " . $DB->sql_like('filearea', ':area'),
+            ['contextid' => $this->task->get_contextid(), 'area' => 'feedback\\_files\\_%']
+        );
+        foreach ($areas as $area) {
+            $subpluginelement->annotate_files('local_catquiz', $area, 'componentid');
+        }
 
         return $subplugin;
     }

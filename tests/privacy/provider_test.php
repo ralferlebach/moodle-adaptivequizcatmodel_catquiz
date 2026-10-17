@@ -284,4 +284,36 @@ final class provider_test extends provider_testcase {
             $userlist->get_userids()
         );
     }
+
+    /**
+     * Through the activity's privacy provider - the way Moodle deletes - the CATquiz rows go too.
+     *
+     * The activity deleted its attempts before it asked the CAT model, and the CAT model finds its rows
+     * through exactly those attempts: everything CATquiz held stayed (local_catquiz #17).
+     */
+    public function test_deleting_through_the_activity_reaches_catquiz(): void {
+        \mod_adaptivequiz\privacy\provider::delete_data_for_user(new \core_privacy\local\request\approved_contextlist(
+            $this->owner,
+            'mod_adaptivequiz',
+            [$this->context->id]
+        ));
+        $this->assertSame(0, $this->cat_rows_of($this->owner, $this->adaptivequiz));
+        $this->assertSame(1, $this->cat_rows_of($this->other, $this->adaptivequiz));
+
+        \mod_adaptivequiz\privacy\provider::delete_data_for_all_users_in_context($this->context);
+        $this->assertSame(0, $this->cat_rows_of($this->other, $this->adaptivequiz));
+        $this->assertSame(1, $this->cat_rows_of($this->owner, $this->otheractivity));
+    }
+
+    /**
+     * The CATquiz attempts of a user in an activity, found through the instance they name.
+     *
+     * @param stdClass $user
+     * @param stdClass $adaptivequiz
+     * @return int
+     */
+    private function cat_rows_of(stdClass $user, stdClass $adaptivequiz): int {
+        global $DB;
+        return $DB->count_records('local_catquiz_attempts', ['userid' => $user->id, 'instanceid' => $adaptivequiz->id]);
+    }
 }

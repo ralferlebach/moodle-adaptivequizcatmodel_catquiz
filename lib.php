@@ -36,8 +36,60 @@ use mod_adaptivequiz\local\attempt;
  * @param attempt $attempt
  */
 function adaptivequizcatmodel_catquiz_post_create_attempt_callback(stdClass $adaptivequiz, attempt $attempt): void {
-        cat_model_params::create_new_for_attempt($attempt->get_attempt()->id);
-        catquiz_handler::prepare_attempt_caches();
+    // The share of this sub-plugin in the timeline of CATquiz, where it has one (adapter #6).
+    adaptivequizcatmodel_catquiz_span('adapter:post_create_attempt', function () use ($attempt) {
+        adaptivequizcatmodel_catquiz_span(
+            'adapter:create_new_for_attempt',
+            fn() => cat_model_params::create_new_for_attempt($attempt->get_attempt()->id)
+        );
+        // The attempt goes along (local_catquiz #146): only its own state is set up, the other attempts of
+        // the session keep theirs. An older CATquiz takes no argument and ignores it.
+        catquiz_handler::prepare_attempt_caches((int) $attempt->get_attempt()->id);
+    });
+}
+
+/**
+ * Runs a step inside a span of the CATquiz timeline - or just runs it, with an older CATquiz (adapter #6).
+ *
+ * @param string $name
+ * @param callable $fn
+ * @param array $meta
+ * @return mixed What the step returns.
+ */
+function adaptivequizcatmodel_catquiz_span(string $name, callable $fn, array $meta = []) {
+    $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
+    if (!class_exists($timeline)) {
+        return $fn();
+    }
+    return $timeline::span($name, $fn, $meta);
+}
+
+/**
+ * The attempt's time limit in seconds, for the host's notice of an attempt that ran out of time (mod_adaptivequiz #20).
+ *
+ * @param stdClass $adaptivequiz
+ * @param stdClass $attempt adaptivequiz_attempt record.
+ * @return int|null null when the test sets none.
+ */
+function adaptivequizcatmodel_catquiz_attempt_time_limit(stdClass $adaptivequiz, stdClass $attempt): ?int {
+    if (!method_exists(catquiz_handler::class, 'attempt_time_limit')) {
+        return null;
+    }
+    return catquiz_handler::attempt_time_limit((int) $attempt->id);
+}
+
+/**
+ * The time for one question of an attempt in seconds, for the host's resume dialog (mod_adaptivequiz #5).
+ *
+ * @param stdClass $adaptivequiz
+ * @param stdClass $attempt adaptivequiz_attempt record.
+ * @return int|null null when the test sets none.
+ */
+function adaptivequizcatmodel_catquiz_item_time_limit(stdClass $adaptivequiz, stdClass $attempt): ?int {
+    if (!method_exists(catquiz_handler::class, 'item_time_limit')) {
+        return null;
+    }
+    return catquiz_handler::item_time_limit((int) $attempt->id);
 }
 
 /**
@@ -138,29 +190,7 @@ function adaptivequizcatmodel_catquiz_post_delete_attempt_callback(
     stdClass $adaptivequiz,
     stdClass $attempt
 ): void {
-    global $DB;
-
-    $attemptid = (int) $attempt->id;
-
-    // The table local_catquiz_attempts stores the component in two spellings: 'adaptivequiz' from the result
-    // page, 'mod_adaptivequiz' from the start of the attempt. Both belong to this attempt.
-    [$compsql, $compparams] = $DB->get_in_or_equal(['mod_adaptivequiz', 'adaptivequiz'], SQL_PARAMS_NAMED, 'comp');
-    $catattemptids = $DB->get_fieldset_select(
-        'local_catquiz_attempts',
-        'id',
-        "attemptid = :attemptid AND component $compsql",
-        ['attemptid' => $attemptid] + $compparams
-    );
-
-    if (!empty($catattemptids)) {
-        [$insql, $inparams] = $DB->get_in_or_equal($catattemptids, SQL_PARAMS_NAMED);
-        // Since local_catquiz 1.2.1/1.3.0 the per-attempt scale results live in
-        // local_catquiz_personparams, referenced by the CAT attempt; local_catquiz_attemptscale is gone.
-        $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql", $inparams);
-        // Progress, too, references the CAT attempt, not the attempt of the component (issue #95).
-        $DB->delete_records_select('local_catquiz_progress', "attemptid $insql", $inparams);
-        $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
-    }
+    \adaptivequizcatmodel_catquiz\local\attempt_cleanup::delete_for_host_attempts([(int) $attempt->id]);
 }
 
 /**

@@ -20,6 +20,7 @@ use advanced_testcase;
 use adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration;
 use context_course;
 use context_module;
+use local_catquiz\local\monitoring\timeline;
 use local_catquiz\local\question\question_answer_evaluation;
 use mod_adaptivequiz\local\attempt;
 use question_bank;
@@ -40,6 +41,7 @@ final class catquiz_item_administration_test extends advanced_testcase {
      * slot is created on reload.
      */
     public function test_active_previous_slot_is_reused(): void {
+        global $DB;
         $this->resetAfterTest();
 
         $datagenerator = $this->getDataGenerator();
@@ -97,7 +99,22 @@ final class catquiz_item_administration_test extends advanced_testcase {
             $adaptiveattempt
         );
 
+        // With the trace on, the reload is a request of its own kind, with the share of this sub-plugin (#6).
+        set_config('attempttrace', 1, 'local_catquiz');
+        timeline::reset();
+
         $evaluation = $adapter->evaluate_ability_to_administer_next_item($slot);
+
+        $traceid = timeline::flush();
+        $this->assertNotNull($traceid, 'A reload leaves a trace.');
+        $trace = $DB->get_record(timeline::TABLE, ['id' => $traceid], '*', MUST_EXIST);
+        $this->assertSame(timeline::KIND_RELOAD, $trace->kind);
+        $names = array_column(json_decode($trace->spans, true), 'name');
+        $this->assertContains('adapter:evaluate', $names);
+        $this->assertContains('adapter:slot_reuse', $names);
+        $this->assertNotContains('catquiz:fetch_question_id', $names, 'Nothing was selected.');
+        // The switch is cached for the request; the next test is a request of its own.
+        timeline::reset();
 
         $this->assertFalse($evaluation->item_administration_is_to_stop());
         $this->assertSame(
@@ -109,5 +126,25 @@ final class catquiz_item_administration_test extends advanced_testcase {
             $evaluation->next_item()->question_id(),
             'No new question must be selected while the previous item is unanswered.'
         );
+    }
+
+    /**
+     * A saved test state that CATquiz refuses becomes the host's exception for a controlled message
+     * (local_catquiz #96): the message of CATquiz, the debug information kept. Every other exception is
+     * passed on as it is.
+     */
+    public function test_a_refused_progress_becomes_a_session_exception(): void {
+        $refused = new \moodle_exception('progressintegrityerror', 'local_catquiz', '', null, 'progress 5 of user 3');
+
+        $converted = catquiz_item_administration::session_exception_for($refused);
+
+        $this->assertInstanceOf(\mod_adaptivequiz\local\catmodel\catmodel_session_exception::class, $converted);
+        $this->assertSame(get_string('progressintegrityerror', 'local_catquiz'), $converted->get_user_message());
+        $this->assertSame('progress 5 of user 3', $converted->debuginfo);
+
+        $others = [new \moodle_exception('error', 'local_catquiz'), new \moodle_exception('progressintegrityerror', 'other')];
+        foreach ($others as $e) {
+            $this->assertSame($e, catquiz_item_administration::session_exception_for($e));
+        }
     }
 }

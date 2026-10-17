@@ -212,15 +212,8 @@ class provider implements adaptivequizcatmodel_provider, \core_privacy\local\met
      * @param int[] $hostattemptids Ids of the attempts of the activity.
      */
     private static function delete(array $catattemptids, array $hostattemptids): void {
-        global $DB;
-
-        if (!empty($catattemptids)) {
-            [$insql, $inparams] = $DB->get_in_or_equal($catattemptids, SQL_PARAMS_NAMED);
-            $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql", $inparams);
-            // Progress references the CAT attempt since local_catquiz issue #95, not the attempt of
-            // the activity. Deleting by the activity's ids removed nothing - or someone else's row.
-            $DB->delete_records_select('local_catquiz_progress', "attemptid $insql", $inparams);
-            $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
-        }
+        // By the attempts of the activity: the CAT attempts of both spellings with their abilities,
+        // working state and trace (local_catquiz #17; the trace was left behind before).
+        \adaptivequizcatmodel_catquiz\local\attempt_cleanup::delete_for_host_attempts($hostattemptids);
     }
 }

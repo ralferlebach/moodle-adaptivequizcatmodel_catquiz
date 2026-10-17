@@ -84,6 +84,19 @@ final class catquiz_item_administration implements item_administration {
      * @return item_administration_evaluation
      */
     public function evaluate_ability_to_administer_next_item(?int $previousquestionslot): item_administration_evaluation {
+        global $CFG;
+        require_once($CFG->dirroot . '/mod/adaptivequiz/catmodel/catquiz/lib.php');
+        // The share of this sub-plugin in the timeline of CATquiz (adapter #6).
+        return adaptivequizcatmodel_catquiz_span('adapter:evaluate', fn() => $this->evaluate($previousquestionslot));
+    }
+
+    /**
+     * The evaluation itself.
+     *
+     * @param int|null $previousquestionslot
+     * @return item_administration_evaluation
+     */
+    private function evaluate(?int $previousquestionslot): item_administration_evaluation {
         /* Issue #6: when the previous item is still unanswered (for example the page
            was reloaded before the answer was submitted), reuse its existing QUBA slot
            instead of selecting a new question. Selecting a new question here would
@@ -95,16 +108,30 @@ final class catquiz_item_administration implements item_administration {
             $previousquestionslot !== null
             && $this->quba->get_question_state($previousquestionslot)->is_active()
         ) {
-            return item_administration_evaluation::with_next_item(
-                next_item::from_quba_slot($previousquestionslot)
+            // A reload: traced as a request of its own kind, it used to leave no trace at all (adapter #6).
+            $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
+            if (class_exists($timeline) && defined($timeline . '::KIND_RELOAD')) {
+                $record = $this->attempt->get_attempt();
+                if (isset($record->id)) {
+                    $timeline::attempt((int) $record->id, (int) ($record->questionsattempted ?? 0), $timeline::KIND_RELOAD);
+                }
+            }
+            return adaptivequizcatmodel_catquiz_span(
+                'adapter:slot_reuse',
+                fn() => item_administration_evaluation::with_next_item(next_item::from_quba_slot($previousquestionslot)),
+                ['reused' => true]
             );
         }
 
-        $fetched = catquiz_handler::fetch_question_id(
-            $this->adaptivequiz->id,
-            'mod_adaptivequiz',
-            $this->attempt->get_attempt()
-        );
+        try {
+            $fetched = catquiz_handler::fetch_question_id(
+                $this->adaptivequiz->id,
+                'mod_adaptivequiz',
+                $this->attempt->get_attempt()
+            );
+        } catch (\moodle_exception $e) {
+            throw self::session_exception_for($e);
+        }
         [$questionid, $errormessage] = $fetched;
 
         if ($questionid === 0) {
@@ -116,5 +143,24 @@ final class catquiz_item_administration implements item_administration {
         }
 
         return item_administration_evaluation::with_next_item(next_item::from_question_id($questionid));
+    }
+
+    /**
+     * What the activity is to be told about an exception of CATquiz (local_catquiz #96).
+     *
+     * A saved test state that does not belong to this attempt is refused by CATquiz, fail-closed. That is
+     * no error of the page: the person gets the message of CATquiz on the activity page, the attempt stays
+     * untouched. A host without the exception type for that, and every other exception, is passed on.
+     *
+     * @param \moodle_exception $e
+     * @return \moodle_exception
+     */
+    public static function session_exception_for(\moodle_exception $e): \moodle_exception {
+        $type = '\\mod_adaptivequiz\\local\\catmodel\\catmodel_session_exception';
+        if ($e->module === 'local_catquiz' && $e->errorcode === 'progressintegrityerror' && class_exists($type)) {
+            // The message itself - getMessage() carries the debug information as well when debugging is on.
+            return new $type(get_string($e->errorcode, $e->module, $e->a), $e->debuginfo ?? null);
+        }
+        return $e;
     }
 }

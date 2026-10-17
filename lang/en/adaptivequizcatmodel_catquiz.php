@@ -33,6 +33,7 @@ $string['highestlevel_help'] = 'The highest or most difficult level the assessme
 $string['lowestlevel'] = 'Lowest level of difficulty';
 $string['lowestlevel_help'] = 'The lowest or least difficult level the assessment can select questions from.  During an attempt the activity will not go beyond this level of difficulty';
 $string['pluginname'] = 'Catquiz CAT model';
+$string['privacy:metadata:local_catquiz'] = 'What CATquiz computes for an attempt - abilities per scale, the working state and the timings of the attempt - is stored by local_catquiz, in the context of this activity.';
 $string['recoveryneedscatquiz'] = 'The recovery of older CATquiz results needs a local_catquiz that rejects attempts beyond their maximum number of questions (adaptivequizcatmodel_catquiz #8). It runs once local_catquiz is upgraded.';
 $string['resultsource'] = 'CATquiz, scale "{$a}" (ability)';
 $string['resultsourcenoscale'] = 'CATquiz (no scale selected yet)';
