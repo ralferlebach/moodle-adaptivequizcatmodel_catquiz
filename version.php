@@ -24,10 +24,13 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026101701;
+$plugin->version = 2026101801;
 $plugin->release = '1.0.4';
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->requires = 2024100700;
+// Issue #31 (local_catquiz): the line for Moodle 4.5. "incompatible" keeps it off 5.0 and later.
+$plugin->supported = [405, 405];
+$plugin->incompatible = 500;
 $plugin->component = 'adaptivequizcatmodel_catquiz';
 $plugin->dependencies = [
     // 2026100902 brings the result contract (mod_adaptivequiz issue #14), which this subplugin implements;

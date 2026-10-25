@@ -24,10 +24,11 @@ use local_catquiz\local\result\scale_result;
 /**
  * The one-off migration of older CATquiz results (adaptivequizcatmodel_catquiz #8).
  *
- * The upgrade to 2026100906 queues this task once. It runs the recovery of cli/recover_legacy_results.php -
- * the same class, the same triage - with --execute, for the window fixed in
- * legacy_result_recovery::MIGRATION_SINCE. The window is stored with the task, so a run that is repeated
- * (a retry, say) uses the same cutoff; the recovery protocol makes a repeated run change nothing.
+ * The upgrade queues this task (2026100906, and again 2026101703). It runs the recovery of
+ * cli/recover_legacy_results.php - the same class, the same triage - with --execute and without a cutoff:
+ * candidates are chosen by what an attempt holds - an invalid snapshot, stored answers, not recovered
+ * before - never by its date (adapter #8). The recovery protocol makes a repeated run change nothing. A
+ * cutoff stored with a task queued by an older version is not used.
  *
  * The regular regrade of the activity is not touched: it keeps existing snapshots as they are.
  *
@@ -43,10 +44,6 @@ class recover_legacy_results extends adhoc_task {
      */
     public static function queue_migration(): void {
         $task = new self();
-        $task->set_custom_data((object) [
-            'since' => legacy_result_recovery::MIGRATION_SINCE,
-            'cutoff' => legacy_result_recovery::cutoff(legacy_result_recovery::MIGRATION_SINCE),
-        ]);
         manager::queue_adhoc_task($task, true);
     }
 
@@ -56,20 +53,14 @@ class recover_legacy_results extends adhoc_task {
      * @return void
      */
     public function execute() {
-        $data = $this->get_custom_data();
-        $cutoff = (int) ($data->cutoff ?? 0);
-        if ($cutoff <= 0) {
-            throw new \coding_exception('The legacy recovery needs a cutoff.');
-        }
         // The validation that rejects an attempt beyond its maximum (33 of 25) comes with local_catquiz.
         // With an older local_catquiz the task waits - Moodle retries it - rather than grade such attempts.
         if (!defined(scale_result::class . '::REASON_MAX_QUESTIONS_EXCEEDED')) {
             throw new \moodle_exception('recoveryneedscatquiz', 'adaptivequizcatmodel_catquiz');
         }
 
-        mtrace('CATquiz legacy recovery (adaptivequizcatmodel_catquiz #8): attempts started from '
-            . ($data->since ?? '?') . ' (cutoff ' . $cutoff . ').');
-        $report = (new legacy_result_recovery($cutoff, true))->run();
+        mtrace('CATquiz legacy recovery (adaptivequizcatmodel_catquiz #8): every attempt, whenever it started.');
+        $report = (new legacy_result_recovery(null, true))->run();
 
         mtrace('  ' . count($report->rows) . ' candidate attempt(s).');
         foreach ($report->counts as $class => $count) {

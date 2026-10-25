@@ -15,6 +15,18 @@
 name: Moodle Plugin CI Main
 
 on:
+  # Cross-repo pinning (re-audit G3): the host and local_catquiz are taken from their branch heads,
+  # which may not yet carry the commit this one was made for. A manual run can pin both to known SHAs.
+  workflow_dispatch:
+    inputs:
+      host_ref:
+        description: 'mod_adaptivequiz: commit SHA or branch (empty = branch head)'
+        required: false
+        default: ''
+      catquiz_ref:
+        description: 'local_catquiz: commit SHA or branch (empty = branch head)'
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -97,6 +109,14 @@ jobs:
           moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
           moodle-plugin-ci add-plugin --branch ALiSe-v-1.2.0-legacy ralferlebach/moodle-local_catquiz
+          # Which commits are tested together - pinned on a manual run, reported always.
+          pin() { [ -z "$2" ] && return 0; git -C "$1" fetch -q --depth 1 origin "$2" && git -C "$1" checkout -q FETCH_HEAD; }
+          pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
+          pin ./moodle-plugin-ci-plugins/moodle-local_catquiz "${{ github.event.inputs.catquiz_ref }}"
+          for d in ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-local_catquiz; do
+            [ -d "$d/.git" ] && echo "::notice::$(basename "$d") @ $(git -C "$d" rev-parse HEAD)" || echo "::warning::$d not found"
+          done
+          echo "::notice::adaptivequizcatmodel_catquiz @ ${{ github.sha }}"
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
           # local_catquiz is cloned by add-plugin without its submodules; the checkout

@@ -108,11 +108,13 @@ final class catquiz_item_administration implements item_administration {
             $previousquestionslot !== null
             && $this->quba->get_question_state($previousquestionslot)->is_active()
         ) {
-            // A reload: traced as a request of its own kind, it used to leave no trace at all (adapter #6).
+            // A reload: traced as a request of its own kind, it used to leave no trace at all (adapter #6). The
+            // attempt is only read while the trace is on.
             $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
-            if (class_exists($timeline) && defined($timeline . '::KIND_RELOAD')) {
+            if (adaptivequizcatmodel_catquiz_tracing() && defined($timeline . '::KIND_RELOAD')) {
                 $record = $this->attempt->get_attempt();
                 if (isset($record->id)) {
+                    adaptivequizcatmodel_catquiz_note('attemptid', (int) $record->id);
                     $timeline::attempt((int) $record->id, (int) ($record->questionsattempted ?? 0), $timeline::KIND_RELOAD);
                 }
             }
@@ -124,10 +126,16 @@ final class catquiz_item_administration implements item_administration {
         }
 
         try {
-            $fetched = catquiz_handler::fetch_question_id(
-                $this->adaptivequiz->id,
-                'mod_adaptivequiz',
-                $this->attempt->get_attempt()
+            $record = $this->attempt->get_attempt();
+            $meta = isset($record->id) ? ['attemptid' => (int) $record->id] : [];
+            if ($meta) {
+                adaptivequizcatmodel_catquiz_note('attemptid', $meta['attemptid']);
+            }
+            // The selection of CATquiz as seen from this sub-plugin, inside adapter:evaluate (adapter #6).
+            $fetched = adaptivequizcatmodel_catquiz_span(
+                'adapter:fetch_question_id',
+                fn() => catquiz_handler::fetch_question_id($this->adaptivequiz->id, 'mod_adaptivequiz', $record),
+                $meta
             );
         } catch (\moodle_exception $e) {
             throw self::session_exception_for($e);

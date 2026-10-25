@@ -1,5 +1,59 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026101801
+
+- local_catquiz #126 (Nacharbeitsauftrag 18.10.2026): Reproducer `tests/duplicate_question_reproducer_test.php`
+  über Host, Adapter und CATquiz – Pilotfragen unter den ersten Fragen, eine Frage in zwei Skalen, Neuladen,
+  ein veralteter zweiter Tab sendet eine schon verarbeitete Antwort, Fortsetzen –: jede Frage der Usage genau
+  einmal, jede Antwort einmal gezählt, kein technisches Duplikat, ein Abschluss, eine Bewertung, gültiges
+  Ergebnis. Zahn-Test: ohne QUBA-Ausschluss und ohne Registrierung der Pilot-Rückgabe rot (Duplikate).
+- #6: Langlauf mit dem ganzen Feedbackpfad (`CATQUIZ_LONGRUN_FEEDBACK=1`, 512 MiB, Prozess-Peak im Ergebnis);
+  optionaler schwerer CI-Schritt (`workflow_dispatch`, Eingabe `longrun`), der scheitert, wenn der Lauf
+  übersprungen wurde.
+
+## Interne Version 2026101800
+
+- Issue #6 (Re-Audit 17.10.2026), Anteil des Adapters an der Versuchs-Timeline von local_catquiz:
+  - Neue Spans `adapter:prepare_attempt_caches` (im Rückruf „Versuch angelegt“, neben
+    `adapter:create_new_for_attempt`) und `adapter:fetch_question_id` (in `adapter:evaluate`). Alle
+    Adapter-Spans tragen `meta.attemptid`.
+  - Der Rückruf „Versuch angelegt“ nennt den Versuch der Timeline sofort: auch eine Anfrage, die vor der
+    ersten Auswahl scheitert, hat ihren Trace.
+  - Der Abschluss war nicht in der Timeline: Der Rückruf „Versuch beendet“ setzt jetzt den Versuch mit der Art
+    `complete` (local_catquiz `timeline::KIND_COMPLETE`, sonst wie bisher) und misst
+    `adapter:post_complete_attempt` ⊇ `adapter:attempt_finalizer`. Ein Prozess, der mehrere Versuche beendet
+    (geplante Aufgabe Zeitlimit), schreibt je Versuch eine Zeile.
+  - Neu laden: der Versuch wird nur noch bei eingeschaltetem Trace gelesen.
+  - Mit local_catquiz 2026101703: Speicher je Span, Pseudo-Span `request` mit gemeinsamer Request-ID von
+    Host und CATquiz, Prozess, Speicher und Fatal-Error-Auswertung (siehe `local_catquiz/doc/attempt-trace.md`).
+  - Tests `tests/trace_test.php`: Trace aus ändert nichts und schreibt nichts, Trace an wählt dieselben
+    Fragen; Host → Adapter → CATquiz als eine korrelierte Timeline (gemeinsame Request-ID, zeitliche
+    Schachtelung); Abschluss-Anfrage; je beendetem Versuch eine Zeile.
+  - Langlauf: `cli/measure_longrun.php` (p50/p95 je Span, Speicher- und QUBA-Wachstum je Item, Fatals, offene
+    Spans, Request-IDs; mehrere Worker als eigene Prozesse) und `tests/longrun_test.php` (Gruppe `longrun`,
+    nur mit `CATQUIZ_LONGRUN=1`; 160 Items aus 420). Messwerte: `attempt-trace-longrun.md`. Gemeinsame
+    Klassen `local\monitoring\request_simulator` und `local\monitoring\longrun_stats`.
+- `mod_form_extension::validation_callback()`: Mit einem anderen CAT-Modell war `$errors` undefiniert und die
+  Rückgabe ein Typfehler; jetzt `[]`. Test `tests/local/catmodel/form/mod_form_extension_test.php`.
+- Issue #8, Audit 18.10.2026: Die Recovery hat keinen Stichtag mehr. Kandidaten bestimmen Rekonstruierbarkeit
+  (CAT-Versuch, beendet, Antworten gespeichert), Invalidität (kein gültiger Snapshot) und Idempotenz
+  (Protokoll) – nicht das Startdatum; ein Versuch ohne `starttime` ist Kandidat wie jeder andere.
+  `legacy_result_recovery::MIGRATION_SINCE` entfällt. Der Upgrade-Task läuft ohne Cutoff, auch ein früher mit
+  Cutoff eingestellter. `--since` bleibt im CLI als optionaler Filter von Hand (dann `outside_window` wie
+  bisher). Der Upgrade-Schritt 2026101703 stellt den Task erneut ein: was der alte Stichtag 14.07.2026
+  ausließ, wird nachgeholt, bereits Protokolliertes übersprungen. Im Protokoll stehen `starttime` 0 (keine
+  Startzeit) und `cutoff` 0 (kein Filter). Tests: Versuche vor und nach dem 14.07.2026 und ohne Startzeit,
+  33/25 und 4/12 bleiben ungültig, gültige Globalskala mit heutigem Bereich über die Linkfunktion benotet,
+  zweiter Lauf ändert nichts, Upgrade nach der alten Migration.
+
+## Interne Version 2026101702
+
+- Re-Audit 17.10.2026 (G3): Die CI checkt Host und CATquiz als Zweige aus; bei einem Lauf mit gemischten
+  Ständen fehlten Host-Klassen oder Datensätze. Manuelle Läufe können beide jetzt auf feste Refs pinnen
+  (`workflow_dispatch`-Eingaben `host_ref`, `catquiz_ref`), und jeder Lauf schreibt die verwendeten SHAs als
+  Hinweis ins Protokoll – ein rotes Ergebnis lässt sich so einem Stand zuordnen.
+- Zwei phpcs-Warnungen (Zeilenlänge) in `attempt_cleanup` und seinem Test behoben.
+
 ## Interne Version 2026100906
 
 - Issue #8: Ältere CATquiz-Versuche mit ungültigem Snapshot wurden durch kein Upgrade und keinen Regrade

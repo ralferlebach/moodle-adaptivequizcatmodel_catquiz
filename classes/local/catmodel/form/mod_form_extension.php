@@ -123,8 +123,9 @@ final class mod_form_extension implements
      * @return array
      */
     public function validation_callback(array $data, array $files): array {
-
-        if ($data['catmodel'] === 'catquiz') {
+        // Another CAT model has no errors here; the variable was undefined then and the return a type error.
+        $errors = [];
+        if (($data['catmodel'] ?? '') === 'catquiz') {
             $errors = catquiz_handler::instance_form_validation($data, $files);
         }
 

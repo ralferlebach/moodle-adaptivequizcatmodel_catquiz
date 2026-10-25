@@ -20,6 +20,7 @@ use adaptivequizcatmodel_catquiz\local\catmodel\result\catquiz_result_provider;
 use adaptivequizcatmodel_catquiz\task\recover_legacy_results;
 use advanced_testcase;
 use context_module;
+use mod_adaptivequiz\local\result\link\linear_link_function;
 use mod_adaptivequiz\local\result\result_service;
 use stdClass;
 
@@ -48,7 +49,7 @@ require_once($CFG->dirroot . '/mod/adaptivequiz/catmodel/catquiz/db/upgrade.php'
  * @covers ::xmldb_adaptivequizcatmodel_catquiz_upgrade
  */
 final class legacy_result_recovery_test extends advanced_testcase {
-    /** @var int The cutoff of every run: 14 July 2026. */
+    /** @var int 14 July 2026, the cutoff the migration had until the audit of 2026-10-18 - now only an operator's --since. */
     private const CUTOFF = 1783980000;
 
     /** @var stdClass The course. */
@@ -215,13 +216,14 @@ final class legacy_result_recovery_test extends advanced_testcase {
     }
 
     /**
-     * A recovery run.
+     * A recovery run: without a date filter, as the migration runs (adapter #8), or with an operator's --since.
      *
      * @param bool $execute
+     * @param int|null $cutoff
      * @return stdClass
      */
-    private function run_recovery(bool $execute): stdClass {
-        return (new legacy_result_recovery(self::CUTOFF, $execute))->run();
+    private function run_recovery(bool $execute, ?int $cutoff = null): stdClass {
+        return (new legacy_result_recovery($cutoff, $execute))->run();
     }
 
     /**
@@ -341,9 +343,10 @@ final class legacy_result_recovery_test extends advanced_testcase {
     }
 
     /**
-     * The cutoff: an attempt started at the cutoff is in the window, one a second earlier is not.
+     * The --since of an operator: an attempt started at that time is in the window, one a second earlier is not,
+     * nor one without a start time.
      */
-    public function test_cutoff_by_start_time(): void {
+    public function test_since_of_the_operator_by_start_time(): void {
         global $DB;
         $this->resetAfterTest();
         $this->activity();
@@ -352,7 +355,7 @@ final class legacy_result_recovery_test extends advanced_testcase {
         $nostart = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
         $DB->set_field('local_catquiz_attempts', 'starttime', null, ['attemptid' => $nostart->id]);
 
-        $run = $this->run_recovery(true);
+        $run = $this->run_recovery(true, self::CUTOFF);
 
         $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $run->rows[$at->id]->class);
         $this->assertSame(legacy_result_recovery::OUTSIDE_WINDOW, $run->rows[$before->id]->class);
@@ -449,7 +452,7 @@ final class legacy_result_recovery_test extends advanced_testcase {
         $first = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
         $second = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
 
-        $report = (new legacy_result_recovery(self::CUTOFF, false, (int) $second->id))->run();
+        $report = (new legacy_result_recovery(null, false, (int) $second->id))->run();
 
         $this->assertSame([(int) $second->id], array_keys($report->rows));
         $fields = array_combine(
@@ -616,40 +619,120 @@ final class legacy_result_recovery_test extends advanced_testcase {
     }
 
     /**
-     * Issue #8, end to end: the upgrade queues the migration once; the task recovers a mixed stock - valid,
-     * 4/12, 33/25, not finalised, before the window - by the same classes as the dry run of the CLI, and the
-     * gradebook gets the valid one only. A second run of the task changes nothing.
+     * Adapter #8, audit of 2026-10-18: no date decides. Attempts started before and after 14 July 2026 and one
+     * without a start time are recovered alike; old 33/25 and 4/12 attempts stay invalid whenever they ran; a
+     * second run changes nothing.
      */
-    public function test_upgrade_queues_the_migration_once_and_it_recovers_the_stock(): void {
+    public function test_every_start_time_is_a_candidate(): void {
         global $DB;
         $this->resetAfterTest();
         $this->activity();
-        // 00:00 in the server's time zone; with the site in Germany that is the cutoff of every test here.
-        $this->setTimezone('Europe/Berlin');
-        $cutoff = legacy_result_recovery::cutoff(legacy_result_recovery::MIGRATION_SINCE);
-        $this->assertSame(self::CUTOFF, $cutoff, 'The window of the migration is fixed.');
-        $valid = $this->legacy($this->attempt($cutoff + DAYSECS), 'range_not_recorded');
-        $belowmin = $this->legacy($this->attempt($cutoff + DAYSECS, ['n' => 4, 'minquestions' => 12]), 'no_stored_result');
-        $abovemax = $this->attempt($cutoff + DAYSECS, ['n' => 25]);
+        $before = $this->legacy($this->attempt(self::CUTOFF - 30 * DAYSECS), 'range_not_recorded');
+        $after = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'no_stored_result');
+        $nostart = $this->legacy($this->attempt(self::CUTOFF - DAYSECS), 'range_not_recorded');
+        $DB->set_field('local_catquiz_attempts', 'starttime', null, ['attemptid' => $nostart->id]);
+        $belowmin = $this->attempt(self::CUTOFF - 60 * DAYSECS, ['n' => 4, 'minquestions' => 12]);
+        $belowmin = $this->legacy($belowmin, 'no_stored_result');
+        $abovemax = $this->attempt(self::CUTOFF - 60 * DAYSECS, ['n' => 25]);
         $this->slots($abovemax, 33);
         $abovemax = $this->legacy($abovemax, 'no_stored_result');
-        $notfinalised = $this->legacy($this->attempt($cutoff + DAYSECS), 'not_finalised');
-        $before = $this->legacy($this->attempt($cutoff - 1), 'range_not_recorded');
+        $expected = [
+            $before->id => legacy_result_recovery::RECOVERED_VALID,
+            $after->id => legacy_result_recovery::RECOVERED_VALID,
+            $nostart->id => legacy_result_recovery::RECOVERED_VALID,
+            $belowmin->id => legacy_result_recovery::RECOVERED_INVALID,
+            $abovemax->id => legacy_result_recovery::RECOVERED_INVALID,
+        ];
+
+        $dry = $this->run_recovery(false);
+        $this->assertEquals($expected, array_map(fn($row) => $row->class, $dry->rows), 'The dry run.');
+        $this->assertSame(0, $dry->counts[legacy_result_recovery::OUTSIDE_WINDOW]);
+
+        $run = $this->run_recovery(true);
+
+        $this->assertEquals($expected, array_map(fn($row) => $row->class, $run->rows));
+        $this->assertStringContainsString('min_questions_not_reached', $run->rows[$belowmin->id]->newreason);
+        $this->assertStringContainsString('max_questions_exceeded', $run->rows[$abovemax->id]->newreason);
+        foreach ([$belowmin, $abovemax] as $attempt) {
+            $this->assertNull($DB->get_field('adaptivequiz_attempt', 'resultpercent', ['id' => $attempt->id]));
+        }
+        $protocol = $DB->get_record('adaptivequiz_cat_recovery', ['attemptid' => $nostart->id], '*', MUST_EXIST);
+        $this->assertEquals(0, $protocol->starttime, 'No start time recorded.');
+        $this->assertEquals(0, $protocol->cutoff, 'No date filter.');
+        $this->assertEquals(self::CUTOFF - 30 * DAYSECS, $DB->get_field('adaptivequiz_cat_recovery', 'starttime', [
+            'attemptid' => $before->id,
+        ]));
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+
+        // Idempotence: a second run changes nothing - no protocol, no snapshot, no grade.
+        $protocols = $DB->get_records('adaptivequiz_cat_recovery', null, 'id');
+        $snapshots = $DB->get_records_list('adaptivequiz_attempt', 'id', array_keys($expected), 'id');
+        $again = $this->run_recovery(true);
+        $this->assertSame(0, $again->graded);
+        $this->assertSame(
+            [legacy_result_recovery::ALREADY_RECOVERED],
+            array_values(array_unique(array_map(fn($row) => $row->class, $again->rows)))
+        );
+        $this->assertEquals($protocols, $DB->get_records('adaptivequiz_cat_recovery', null, 'id'));
+        $this->assertEquals($snapshots, $DB->get_records_list('adaptivequiz_attempt', 'id', array_keys($expected), 'id'));
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+    }
+
+    /**
+     * A valid global scale without a recorded range is graded on the range the scale has today, through the
+     * link function the result names (linear): 1.2 on -4..4 is 65 %.
+     */
+    public function test_valid_global_scale_with_current_range_is_graded_through_the_link_function(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->activity();
+        $attempt = $this->legacy($this->attempt(self::CUTOFF - 90 * DAYSECS), 'range_not_recorded');
+
+        $run = $this->run_recovery(true);
+
+        $row = $run->rows[$attempt->id];
+        $this->assertSame(legacy_result_recovery::RECOVERED_VALID, $row->class);
+        $this->assertSame(legacy_result_recovery::RANGE_CURRENT, $row->rangesource);
+        $this->assertSame([-4.0, 4.0], [$row->rangelower, $row->rangeupper]);
+        $snapshot = $DB->get_record('adaptivequiz_attempt', ['id' => $attempt->id]);
+        $this->assertEquals(1, $snapshot->resultvalid);
+        $this->assertSame(linear_link_function::ID, $snapshot->resultlink);
+        $expected = result_service::percentage(1.2, -4.0, 4.0, linear_link_function::ID);
+        $this->assertEqualsWithDelta($expected, (float) $snapshot->resultpercent, 1e-3);
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+    }
+
+    /**
+     * Issue #8, end to end: the upgrade queues the migration once; the task recovers a mixed stock - valid,
+     * 4/12, 33/25, not finalised, started before 14 July 2026 - by the same classes as the dry run of the CLI,
+     * without a date filter, and the gradebook gets the valid ones only. A second run changes nothing.
+     */
+    public function test_upgrade_queues_the_migration_once_and_it_recovers_the_stock(): void {
+        global $DB, $CFG;
+        $this->resetAfterTest();
+        $this->activity();
+        $this->setTimezone('Europe/Berlin');
+        $valid = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
+        $belowmin = $this->legacy($this->attempt(self::CUTOFF + DAYSECS, ['n' => 4, 'minquestions' => 12]), 'no_stored_result');
+        $abovemax = $this->attempt(self::CUTOFF + DAYSECS, ['n' => 25]);
+        $this->slots($abovemax, 33);
+        $abovemax = $this->legacy($abovemax, 'no_stored_result');
+        $notfinalised = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'not_finalised');
+        $before = $this->legacy($this->attempt(self::CUTOFF - 1), 'range_not_recorded');
         $expected = [
             $valid->id => legacy_result_recovery::RECOVERED_VALID,
             $belowmin->id => legacy_result_recovery::RECOVERED_INVALID,
             $abovemax->id => legacy_result_recovery::RECOVERED_INVALID,
             $notfinalised->id => legacy_result_recovery::NOT_FINALISED,
-            $before->id => legacy_result_recovery::OUTSIDE_WINDOW,
+            $before->id => legacy_result_recovery::RECOVERED_VALID,
         ];
-        $dry = (new legacy_result_recovery($cutoff, false))->run();
+        $dry = (new legacy_result_recovery(null, false))->run();
         $this->assertEquals($expected, array_map(fn($row) => $row->class, $dry->rows), 'The dry run of the CLI.');
 
-        // The upgrade step, as from 2026100905.
-        global $CFG;
+        // The upgrade steps, as from 2026100905: both queue the same task, which is queued once.
         set_config('version', 2026100905, 'adaptivequizcatmodel_catquiz');
         $this->assertTrue(xmldb_adaptivequizcatmodel_catquiz_upgrade(2026100905));
-        $this->assertEquals(2026100906, get_config('adaptivequizcatmodel_catquiz', 'version'));
+        $this->assertEquals(2026101703, get_config('adaptivequizcatmodel_catquiz', 'version'));
         // The savepoint marks the site as upgrading; the upgrade is over before cron runs the task.
         unset_config('upgraderunning');
         unset($CFG->upgraderunning);
@@ -657,7 +740,7 @@ final class legacy_result_recovery_test extends advanced_testcase {
         $this->assertCount(1, $queued, 'The upgrade queued the migration.');
         recover_legacy_results::queue_migration();
         $this->assertCount(1, \core\task\manager::get_adhoc_tasks(recover_legacy_results::class), 'Queued once.');
-        $this->assertSame($cutoff, (int) reset($queued)->get_custom_data()->cutoff);
+        $this->assertObjectNotHasProperty('cutoff', (object) reset($queued)->get_custom_data(), 'No cutoff.');
         $this->assertNull($this->grade(), 'The upgrade itself grades nothing.');
 
         $output = $this->run_tasks(recover_legacy_results::class);
@@ -668,16 +751,13 @@ final class legacy_result_recovery_test extends advanced_testcase {
             if ($class === legacy_result_recovery::RECOVERED_VALID || $class === legacy_result_recovery::RECOVERED_INVALID) {
                 $this->assertNotFalse($protocolled, "Attempt $attemptid is protocolled.");
                 $this->assertEquals($class === legacy_result_recovery::RECOVERED_VALID ? 1 : 0, $protocolled->valid);
-                $this->assertEquals($cutoff, $protocolled->cutoff);
+                $this->assertEquals(0, $protocolled->cutoff);
             } else {
                 $this->assertFalse($protocolled, "Attempt $attemptid is left alone.");
             }
         }
-        $protocol = $DB->get_record('adaptivequiz_cat_recovery', ['attemptid' => $valid->id]);
-        $this->assertSame(legacy_result_recovery::RANGE_CURRENT, $protocol->rangesource);
-        $this->assertEquals($this->scaleid, $protocol->globalscaleid);
-        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3, 'Last attempt with a valid result: the valid one.');
-        foreach ([$belowmin, $abovemax, $notfinalised, $before] as $attempt) {
+        $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+        foreach ([$belowmin, $abovemax, $notfinalised] as $attempt) {
             $this->assertNull($DB->get_field('adaptivequiz_attempt', 'resultpercent', ['id' => $attempt->id]));
         }
 
@@ -687,5 +767,35 @@ final class legacy_result_recovery_test extends advanced_testcase {
         $this->run_tasks(recover_legacy_results::class);
         $this->assertEquals($protocols, $DB->get_records('adaptivequiz_cat_recovery', null, 'id'));
         $this->assertEqualsWithDelta(65.0, $this->grade(), 1e-3);
+    }
+
+    /**
+     * A site that ran the migration with the old cutoff: the upgrade to 2026101703 queues it again, and the task
+     * - also one queued earlier with a cutoff in its data - takes on what the cutoff had left, skipping the rest.
+     */
+    public function test_upgrade_after_the_old_migration_takes_on_what_the_cutoff_left(): void {
+        global $DB, $CFG;
+        $this->resetAfterTest();
+        $this->activity();
+        $recovered = $this->legacy($this->attempt(self::CUTOFF + DAYSECS), 'range_not_recorded');
+        $left = $this->legacy($this->attempt(self::CUTOFF - DAYSECS), 'range_not_recorded');
+        // What the migration of 2026100906 did: the attempt in its window, nothing before it.
+        $old = $this->run_recovery(true, self::CUTOFF);
+        $this->assertSame(legacy_result_recovery::OUTSIDE_WINDOW, $old->rows[$left->id]->class);
+        $protocol = $DB->get_record('adaptivequiz_cat_recovery', ['attemptid' => $recovered->id], '*', MUST_EXIST);
+        // A task an older version queued, with its cutoff.
+        $task = new recover_legacy_results();
+        $task->set_custom_data((object) ['since' => '2026-07-14', 'cutoff' => self::CUTOFF]);
+        \core\task\manager::queue_adhoc_task($task);
+
+        set_config('version', 2026100906, 'adaptivequizcatmodel_catquiz');
+        $this->assertTrue(xmldb_adaptivequizcatmodel_catquiz_upgrade(2026100906));
+        unset_config('upgraderunning');
+        unset($CFG->upgraderunning);
+        $this->run_tasks(recover_legacy_results::class);
+
+        $this->assertEquals(1, $DB->get_field('adaptivequiz_cat_recovery', 'valid', ['attemptid' => $left->id]));
+        $this->assertEquals($protocol, $DB->get_record('adaptivequiz_cat_recovery', ['attemptid' => $recovered->id]));
+        $this->assertSame(0, $DB->count_records('adaptivequiz_cat_recovery') - 2, 'Each attempt protocolled once.');
     }
 }

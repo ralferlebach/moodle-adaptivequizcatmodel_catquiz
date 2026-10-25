@@ -125,7 +125,8 @@ final class attempt_cleanup_test extends advanced_testcase {
         $s = $this->setup[$name];
         $what = $exists ? 'kept' : 'deleted';
         $this->assertSame($exists, $DB->record_exists('local_catquiz_attempts', ['id' => $s['catid']]), "$name attempt $what");
-        $this->assertSame($exists, $DB->record_exists('local_catquiz_progress', ['attemptid' => $s['catid']]), "$name progress $what");
+        $progress = $DB->record_exists('local_catquiz_progress', ['attemptid' => $s['catid']]);
+        $this->assertSame($exists, $progress, "$name progress $what");
         $this->assertSame(
             $exists,
             $DB->record_exists('local_catquiz_personparams', ['attemptid' => $s['catid']]),

@@ -20,7 +20,7 @@
  * A dry run unless --execute is given. See legacy_result_recovery for what is done, and in which order.
  *
  * Usage:
- *   php mod/adaptivequiz/catmodel/catquiz/cli/recover_legacy_results.php --since=2026-07-14 [--execute]
+ *   php mod/adaptivequiz/catmodel/catquiz/cli/recover_legacy_results.php [--execute] [--since=YYYY-MM-DD]
  *       [--attemptid=N] [--csv=/path/file.csv]
  *
  * @package    adaptivequizcatmodel_catquiz
@@ -43,31 +43,35 @@ require_once($CFG->libdir . '/clilib.php');
 $usage = <<<EOT
 Recovers the results of older CATquiz attempts for the gradebook. Dry run unless --execute is given.
 
-Attempts that started before --since stay as they are. Every other completed attempt without a valid
-result is judged again from its answers by today's rules; a missing range is taken from the scale as it
-stands today and marked. Graded is the global scale. Recovered attempts are protocolled and skipped by
-a later run.
+Every completed attempt without a valid result is judged again from its answers by today's rules,
+whenever it ran; a missing range is taken from the scale as it stands today and marked. Graded is the
+global scale. Recovered attempts are protocolled and skipped by a later run. The upgrade queues the same
+recovery as a task, without a date (adapter #8).
 
-  --since=YYYY-MM-DD   Required. Start of the window, 00:00 in the server's time zone. The upgrade to
-                       2026100906 ran the recovery once with --since=2026-07-14 (task in the log).
   --execute            Write. Without it nothing is changed.
+  --since=YYYY-MM-DD   Optional filter of the operator: only attempts started from this day on, 00:00 in
+                       the server's time zone; attempts started earlier or without a start time are left
+                       as they are (outside_window). Without it the date decides nothing.
   --attemptid=N        Only this attempt (adaptivequiz_attempt.id).
   --csv=FILE           Write one line per candidate attempt to FILE.
   -h, --help           This help.
 
 EOT;
 
-if ($options['help'] || $unrecognised || $options['since'] === '') {
+if ($options['help'] || $unrecognised) {
     cli_write($usage);
     exit($options['help'] ? 0 : 1);
 }
-try {
-    // The same reading of the date as the one-off migration (task\recover_legacy_results).
-    $cutoff = legacy_result_recovery::cutoff($options['since']);
-} catch (invalid_parameter_exception $e) {
-    cli_error("--since must be a date YYYY-MM-DD, not '{$options['since']}'.");
+$cutoff = null;
+if ($options['since'] !== '') {
+    try {
+        $cutoff = legacy_result_recovery::cutoff($options['since']);
+    } catch (invalid_parameter_exception $e) {
+        cli_error("--since must be a date YYYY-MM-DD, not '{$options['since']}'.");
+    }
 }
-$since = (new DateTime('@' . $cutoff))->setTimezone(core_date::get_server_timezone_object());
+$window = $cutoff === null ? 'without a date filter'
+    : 'since ' . (new DateTime('@' . $cutoff))->setTimezone(core_date::get_server_timezone_object())->format('Y-m-d H:i T');
 
 $recovery = new legacy_result_recovery(
     $cutoff,
@@ -88,7 +92,7 @@ if ($options['csv'] !== '') {
     fclose($handle);
 }
 
-cli_writeln(($options['execute'] ? 'Recovery' : 'Dry run') . ' since ' . $since->format('Y-m-d H:i T')
+cli_writeln(($options['execute'] ? 'Recovery' : 'Dry run') . ' ' . $window
     . ': ' . count($report->rows) . ' candidate attempt(s).');
 foreach ($report->counts as $class => $count) {
     cli_writeln(sprintf('  %-22s %6d', $class, $count));
