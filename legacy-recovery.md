@@ -1,13 +1,27 @@
 # Recovery älterer CATquiz-Ergebnisse (local_catquiz #137, Adapter #8)
 
-Stand 15.10.2026, Adapter 2026100906, local_catquiz 2026100922 (1.2.1) / 2026100923 (1.3.0).
+Stand 18.10.2026, Adapter 2026101703, local_catquiz 2026100922 (1.2.1) / 2026100923 (1.3.0) oder neuer.
 
 ## Wozu
 
 Versuche, die vor dem Einfrieren des Ergebnisbereichs beendet wurden, haben keine Note. Ihr Snapshot
 trägt einen der Gründe `range_not_recorded`, `no_primary_scale` / `no_stored_result` oder
-`not_finalised`. Die Recovery beurteilt solche Versuche innerhalb eines Zeitfensters nach heutigen Regeln
-neu und führt die Note über die normale Gradebook-Kette nach.
+`not_finalised`. Die Recovery beurteilt solche Versuche nach heutigen Regeln neu und führt die Note über die
+normale Gradebook-Kette nach – unabhängig davon, wann sie liefen.
+
+## Politik: kein Stichtag (Adapter #8, Audit 18.10.2026)
+
+Ob ein Versuch rekonstruiert wird, entscheiden allein
+
+- **Rekonstruierbarkeit:** ein CAT-Versuch gehört dazu, CATquiz hat ihn beendet, seine Antworten (Progress)
+  sind gespeichert;
+- **Invalidität:** sein Snapshot hat kein gültiges Ergebnis (oder ist gültig ohne Prozentwert);
+- **Idempotenz:** er ist noch nicht protokolliert.
+
+Das Startdatum entscheidet nichts; ein Versuch ohne `starttime` ist Kandidat wie jeder andere. Bis 2026101702
+hatte die automatische Migration den festen Stichtag 14.07.2026 (`MIGRATION_SINCE`) – das widersprach dieser
+Politik und ist entfallen. Ein Stichtag ist nur noch ein Filter, den eine Betreiberin im CLI ausdrücklich setzt
+(`--since`).
 
 ## Einmalige Migration beim Upgrade (Adapter #8)
 
@@ -15,13 +29,14 @@ Der normale Regrade der Aktivität (`regrade_activity`, ausgelöst etwa beim Spe
 nimmt einen vorhandenen Snapshot bewusst nicht neu. Ein älterer Versuch mit ungültigem Snapshot bliebe
 deshalb ohne Note, obwohl der Task erfolgreich läuft. Damit niemand das CLI kennen muss:
 
-- Das Upgrade auf **2026100906** stellt einmal den Ad-hoc-Task `task\recover_legacy_results` ein. Das
-  Upgrade selbst bewertet nichts.
-- Der Task ruft dieselbe Klasse `legacy_result_recovery` mit `--execute`-Verhalten auf. Er nutzt dieselbe
-  Triage und dasselbe Protokoll wie das CLI.
-- Zeitfenster: `legacy_result_recovery::MIGRATION_SINCE` = **14.07.2026**, 00:00 Uhr in der Zeitzone des
-  Servers. Der Stichtag ist fest, kein gleitendes „drei Monate zurück“. Er wird mit dem Task gespeichert
-  und steht je Versuch im Protokoll (`cutoff`).
+- Das Upgrade auf **2026100906** stellt den Ad-hoc-Task `task\recover_legacy_results` ein, das Upgrade auf
+  **2026101703** noch einmal: Was der alte Stichtag auf einer schon migrierten Website ausließ, wird
+  nachgeholt; bereits Protokolliertes überspringt der Lauf. Ist der Task noch eingestellt, bleibt es bei einem.
+  Das Upgrade selbst bewertet nichts.
+- Der Task ruft dieselbe Klasse `legacy_result_recovery` mit `--execute`-Verhalten und **ohne Cutoff** auf. Er
+  nutzt dieselbe Triage und dasselbe Protokoll wie das CLI. Ein Cutoff in den Daten eines früher
+  eingestellten Tasks wird nicht mehr verwendet.
+- Im Protokoll steht `cutoff` = 0 (kein Filter); ein Versuch ohne Startzeit hat `starttime` = 0.
 - Ein wiederholter Lauf, etwa ein Retry, überspringt protokollierte Versuche und ändert nichts.
 - Ein Fehler bei einem Versuch oder einer Aktivität stoppt die übrigen nicht. Der Fehler steht im
   Task-Log (`failed: attempt …`). Von der fehlgeschlagenen Bewertung bleibt nichts: Snapshot, Note und
@@ -63,7 +78,7 @@ Kandidaten sind beendete Versuche von CATquiz-Aktivitäten ohne gültigen Snapsh
 |---|---|
 | noch nicht rekonstruiert (Protokolltabelle) | `already_recovered`, unverändert |
 | CAT-Versuch vorhanden | `no_cat_attempt`, unverändert |
-| `starttime` ≥ Stichtag (leer zählt als davor) | `outside_window`, unverändert |
+| nur mit `--since`: `starttime` ≥ `--since` (leer zählt als davor) | `outside_window`, unverändert |
 | von CATquiz beendet (`endtime`) | `not_finalised`, unverändert |
 | Antworten (Progress) gespeichert | `not_reconstructable`, unverändert |
 
@@ -87,25 +102,33 @@ Neubeurteilung schon gültig gesetzt hat, dessen Snapshot aber noch keinen Proze
 Zuerst ein Probelauf. Er schreibt nichts:
 
     sudo -u www-data php mod/adaptivequiz/catmodel/catquiz/cli/recover_legacy_results.php \
-        --since=2026-07-14 --csv=/tmp/recovery-probe.csv
+        --csv=/tmp/recovery-probe.csv
 
 Die CSV-Datei enthält eine Zeile je Kandidat. Prüfen Sie die Verteilung, danach schreiben Sie:
 
     sudo -u www-data php mod/adaptivequiz/catmodel/catquiz/cli/recover_legacy_results.php \
-        --since=2026-07-14 --execute --csv=/tmp/recovery-run.csv
+        --execute --csv=/tmp/recovery-run.csv
 
 Mit `--attemptid=N` läuft die Recovery nur für einen Versuch. Ein zweiter Lauf überspringt protokollierte
 Versuche und ändert nichts.
 
-`--since` ist 00:00 Uhr in der Zeitzone des Servers.
+`--since=YYYY-MM-DD` ist optional und schränkt einen Lauf von Hand auf Versuche ein, die ab diesem Tag
+(00:00 Uhr in der Zeitzone des Servers) begonnen haben; frühere und solche ohne Startzeit bleiben
+`outside_window`. Ohne `--since` entscheidet das Datum nichts – wie im Upgrade-Task.
 
 ## Tests
 
-`tests/local/recovery/legacy_result_recovery_test.php` (18 Fälle) prüft:
+`tests/local/recovery/legacy_result_recovery_test.php` (21 Fälle) prüft:
 
+- ohne Stichtag: Versuche vor und nach dem 14.07.2026 und ohne `starttime` werden erfasst; alte 33/25 und
+  4/12 bleiben ungültig, gleich wann sie liefen; ein zweiter Lauf ändert weder Protokoll noch Snapshot noch
+  Note
+- gültige Globalskala ohne eingefrorenen Bereich: heutiger Bereich, Linkfunktion `linear` im Snapshot, 65 %
 - Upgrade → Ad-hoc-Task → Recovery → Snapshot → Gradebook mit gemischtem Bestand (gültig, 4/12, 33/25,
-  nie beendet, vor dem Stichtag); dieselbe Einteilung wie im Probelauf des CLI; nur einmal eingestellt;
-  zweiter Lauf ohne Änderung
+  nie beendet, vor dem 14.07.2026 – jetzt benotet); dieselbe Einteilung wie im Probelauf des CLI; nur einmal
+  eingestellt, ohne Cutoff; zweiter Lauf ohne Änderung
+- Upgrade auf 2026101703 nach der alten Migration (auch ein Task mit altem Cutoff): das Ausgelassene wird
+  nachgeholt, das Protokollierte bleibt
 - der normale Regrade lässt den ungültigen Snapshot unverändert
 - alter Grund `no_primary_scale` und vertauschte `isprimary`-Markierung: Note der Globalskala
 - 33 Slots bei Maximum 25: ohne Note; 25 bei 25: mit Note
@@ -116,7 +139,7 @@ Versuche und ändert nichts.
 - Bewertung auf der Globalskala bei berichteter Subskala
 - 4 von mindestens 12 Fragen: ohne Note
 - Fraction 1: ohne Note
-- Stichtag: genau am Stichtag, eine Sekunde davor, ohne `starttime`
+- `--since` von Hand: genau am Tag, eine Sekunde davor, ohne `starttime`
 - nie beendet, keine Antworten, kein CAT-Versuch
 - nach dem Snapshot beendet
 - gültige Versuche bleiben unberührt

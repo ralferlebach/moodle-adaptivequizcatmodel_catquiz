@@ -76,11 +76,45 @@ final class duplicate_test extends advanced_testcase {
     }
 
     /**
+     * Duplicates a course module with the API the Moodle version offers (issue #9).
+     *
+     * duplicate_module() is deprecated since Moodle 5.2 (MDL-86858); its replacement is
+     * core_courseformat\local\cmactions::duplicate(). The class exists in 5.1 already, without that method - so
+     * the check is on the method, not on the class or the version, as in mod_adaptivequiz.
+     *
+     * @param \cm_info $cm
+     * @return \cm_info The copy.
+     */
+    private function duplicate(\cm_info $cm): \cm_info {
+        if (method_exists(\core_courseformat\local\cmactions::class, 'duplicate')) {
+            return (new \core_courseformat\local\cmactions($this->course))->duplicate($cm->id);
+        }
+        return duplicate_module($this->course, $cm);
+    }
+
+    /**
+     * Deletes a course module with the API the Moodle version offers (issue #9).
+     *
+     * course_delete_module() is deprecated since Moodle 5.2 (MDL-86856); its replacement is
+     * core_courseformat\local\cmactions::delete(), checked by its method as duplicate().
+     *
+     * @param int $cmid
+     * @return void
+     */
+    private function delete(int $cmid): void {
+        if (method_exists(\core_courseformat\local\cmactions::class, 'delete')) {
+            (new \core_courseformat\local\cmactions($this->course))->delete($cmid);
+            return;
+        }
+        course_delete_module($cmid);
+    }
+
+    /**
      * The copy has settings of its own with the same values, pointing to itself, and its own image.
      */
     public function test_duplicate_has_its_own_settings_and_files(): void {
         global $DB;
-        $newcm = duplicate_module($this->course, get_fast_modinfo($this->course)->get_cm($this->adaptivequiz->cmid));
+        $newcm = $this->duplicate(get_fast_modinfo($this->course)->get_cm($this->adaptivequiz->cmid));
 
         $original = $DB->get_record(
             'local_catquiz_tests',
@@ -114,7 +148,7 @@ final class duplicate_test extends advanced_testcase {
         // The two are independent: changing the copy leaves the original, deleting the original leaves the copy.
         $DB->set_field('local_catquiz_tests', 'json', '{}', ['id' => $copy->id]);
         $this->assertSame($original->json, $DB->get_field('local_catquiz_tests', 'json', ['id' => $original->id]));
-        course_delete_module($this->adaptivequiz->cmid);
+        $this->delete((int) $this->adaptivequiz->cmid);
         $this->assertFalse($DB->record_exists('local_catquiz_tests', ['id' => $original->id]));
         $this->assertTrue($DB->record_exists('local_catquiz_tests', ['id' => $copy->id]));
     }

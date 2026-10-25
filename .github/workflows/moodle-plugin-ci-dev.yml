@@ -15,6 +15,22 @@
 name: Moodle Plugin CI Dev
 
 on:
+  # Cross-repo pinning (re-audit G3): the host and local_catquiz are taken from their branch heads,
+  # which may not yet carry the commit this one was made for. A manual run can pin both to known SHAs.
+  workflow_dispatch:
+    inputs:
+      host_ref:
+        description: 'mod_adaptivequiz: commit SHA or branch (empty = branch head)'
+        required: false
+        default: ''
+      catquiz_ref:
+        description: 'local_catquiz: commit SHA or branch (empty = branch head)'
+        required: false
+        default: ''
+      longrun:
+        description: 'Heavy: the 160-item long run with the whole feedback path, 512 MiB (adapter #6)'
+        required: false
+        default: 'false'
   push:
     branches-ignore:
       - main
@@ -153,6 +169,14 @@ jobs:
           moodle-plugin-ci add-plugin --branch v-3.0 ralferlebach/moodle-mod_adaptivequiz
           moodle-plugin-ci add-plugin --branch master branchup/moodle-filter_shortcodes
           moodle-plugin-ci add-plugin --branch migration-zu-moodle-5.x ralferlebach/moodle-local_catquiz
+          # Which commits are tested together - pinned on a manual run, reported always.
+          pin() { [ -z "$2" ] && return 0; git -C "$1" fetch -q --depth 1 origin "$2" && git -C "$1" checkout -q FETCH_HEAD; }
+          pin ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz "${{ github.event.inputs.host_ref }}"
+          pin ./moodle-plugin-ci-plugins/moodle-local_catquiz "${{ github.event.inputs.catquiz_ref }}"
+          for d in ./moodle-plugin-ci-plugins/moodle-mod_adaptivequiz ./moodle-plugin-ci-plugins/moodle-local_catquiz; do
+            [ -d "$d/.git" ] && echo "::notice::$(basename "$d") @ $(git -C "$d" rev-parse HEAD)" || echo "::warning::$d not found"
+          done
+          echo "::notice::adaptivequizcatmodel_catquiz @ ${{ github.sha }}"
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_host
           moodle-plugin-ci add-plugin ralferlebach/moodle-catquizcentralhub_client
           # local_catquiz is cloned by add-plugin without its submodules; the checkout
@@ -173,6 +197,21 @@ jobs:
       - name: PHPUnit tests
         if: ${{ always() }}
         run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+
+      # Optional heavy job (adapter #6, audit 18.10.): only on a manual run with longrun = true, on PostgreSQL.
+      # A skip is no green: the step fails unless the long run really ran and passed.
+      - name: Long run with feedback (160 items, 512 MiB)
+        if: ${{ github.event.inputs.longrun == 'true' && matrix.database == 'pgsql' }}
+        env:
+          CATQUIZ_LONGRUN: '1'
+          CATQUIZ_LONGRUN_FEEDBACK: '1'
+          CATQUIZ_LONGRUN_OUT: ${{ github.workspace }}/ci-logs/longrun.json
+        run: |
+          set -o pipefail
+          cd moodle
+          vendor/bin/phpunit --filter test_long_attempt_is_traced_request_by_request \
+            public/mod/adaptivequiz/catmodel/catquiz/tests/longrun_test.php 2>&1 | tee ../ci-logs/longrun.log
+          grep -q 'OK (1 test' ../ci-logs/longrun.log || { echo '::error::The long run did not run or did not pass.'; exit 1; }
 
       - name: Collect error summary
         if: ${{ always() }}

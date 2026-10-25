@@ -32,9 +32,12 @@ use stdClass;
  *
  * 1. Triage. Candidates are completed attempts of CATquiz activities without a valid result snapshot
  *    (also one a revalidation marked valid when the grading after it failed: valid, but no percentage).
- *    An attempt is left as it is when it was recovered before, has no CAT attempt, started before the
- *    cutoff (local_catquiz_attempts.starttime; none counts as before), was never finalised by CATquiz,
- *    or has no stored answers (progress) to be judged from.
+ *    Whether an attempt is recovered depends on what it holds, not on when it ran (adapter #8): it is left
+ *    as it is when it was recovered before (idempotence), has no CAT attempt, was never finalised by
+ *    CATquiz, or has no stored answers (progress) to be judged from (reconstructability). Its start time
+ *    plays no part - an attempt without one is a candidate like any other. Only an operator can narrow a
+ *    run to attempts started from a day on (the CLI's --since); then an attempt started earlier, or
+ *    without a start time, is left as it is (OUTSIDE_WINDOW).
  * 2. Recovery. The attempt is judged again from its answers by today's rules
  *    (local_catquiz attempt_revalidator - the validator of every finalisation). The result is stored
  *    per scale; a scale without a range recorded at finalisation gets the range of the scale as it
@@ -47,9 +50,8 @@ use stdClass;
  * second run changes nothing. An error with one attempt, or one activity, is reported for it (FAILED) and
  * the run goes on with the others; nothing of the failed attempt is kept, and a later run tries it again.
  *
- * Two ways in, one recovery: cli/recover_legacy_results.php (dry run, diagnosis, by hand) and the one-off
- * migration the upgrade to 2026100906 queues (task\recover_legacy_results, issue #8) for the window
- * MIGRATION_SINCE.
+ * Two ways in, one recovery: cli/recover_legacy_results.php (dry run, diagnosis, by hand, optionally from a
+ * day on) and the migration the upgrade queues (task\recover_legacy_results, issue #8) - without a cutoff.
  *
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 onwards Ralf Erlebach
@@ -62,7 +64,7 @@ final class legacy_result_recovery {
     /** @var string No CAT attempt belongs to the attempt. */
     public const NO_CAT_ATTEMPT = 'no_cat_attempt';
 
-    /** @var string Started before the cutoff, or without a start time. */
+    /** @var string Started before the --since of the operator, or without a start time; only with --since. */
     public const OUTSIDE_WINDOW = 'outside_window';
 
     /** @var string CATquiz never finalised the attempt. */
@@ -96,13 +98,6 @@ final class legacy_result_recovery {
     private const TABLE = 'adaptivequiz_cat_recovery';
 
     /**
-     * @var string Start of the window of the one-off migration (issue #8): attempts started from this day on,
-     *      00:00 in the server's time zone. Fixed, not "three months back from now", so that the migration is
-     *      reproducible: three months before the recovery was written (concept of 2026-10-14).
-     */
-    public const MIGRATION_SINCE = '2026-07-14';
-
-    /**
      * The cutoff of a window that starts on a day: 00:00 in the server's time zone.
      *
      * @param string $date YYYY-MM-DD
@@ -120,13 +115,14 @@ final class legacy_result_recovery {
     /**
      * The recovery.
      *
-     * @param int $cutoff Unix time; attempts that started earlier are left as they are.
+     * @param int|null $cutoff Unix time of an operator's --since: attempts that started earlier, or without a
+     *      start time, are left as they are. null - the migration - for every attempt, whenever it ran.
      * @param bool $execute False: report only.
      * @param int|null $attemptid Only this attempt (adaptivequiz_attempt.id).
      */
     public function __construct(
-        /** @var int Unix time; attempts that started earlier are left as they are. */
-        private readonly int $cutoff,
+        /** @var int|null Unix time of an operator's --since; null for no filter by date. */
+        private readonly ?int $cutoff,
         /** @var bool False: report only. */
         private readonly bool $execute,
         /** @var int|null Only this attempt. */
@@ -224,7 +220,8 @@ final class legacy_result_recovery {
         $row->catattemptid = (int) $catattempt->id;
         $row->starttime = $catattempt->starttime === null ? null : (int) $catattempt->starttime;
         $row->globalscaleid = !empty($catattempt->scaleid) ? (int) $catattempt->scaleid : null;
-        if ($row->starttime === null || $row->starttime < $this->cutoff) {
+        // A filter of the operator only; without it the date decides nothing (adapter #8).
+        if ($this->cutoff !== null && ($row->starttime === null || $row->starttime < $this->cutoff)) {
             $row->class = self::OUTSIDE_WINDOW;
             return $row;
         }
@@ -373,8 +370,9 @@ final class legacy_result_recovery {
                 'attemptid' => $attemptid,
                 'instanceid' => $instanceid,
                 'catattemptid' => $row->catattemptid,
-                'starttime' => $row->starttime,
-                'cutoff' => $this->cutoff,
+                // 0: no start time recorded, no --since given (the columns are NOT NULL).
+                'starttime' => (int) ($row->starttime ?? 0),
+                'cutoff' => (int) ($this->cutoff ?? 0),
                 'oldreason' => $row->oldreason,
                 'steps' => implode(',', $row->steps),
                 'globalscaleid' => $row->globalscaleid,

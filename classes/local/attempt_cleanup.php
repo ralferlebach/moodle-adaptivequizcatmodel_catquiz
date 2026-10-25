@@ -92,7 +92,12 @@ final class attempt_cleanup {
         global $DB;
         $DB->delete_records('local_catquiz_tests', ['componentid' => $instanceid, 'component' => 'mod_adaptivequiz']);
 
-        $hostattemptids = $DB->get_fieldset_select('adaptivequiz_attempt', 'id', 'instance = :instance', ['instance' => $instanceid]);
+        $hostattemptids = $DB->get_fieldset_select(
+            'adaptivequiz_attempt',
+            'id',
+            'instance = :instance',
+            ['instance' => $instanceid]
+        );
         self::delete_for_host_attempts($hostattemptids);
 
         [$compsql, $compparams] = $DB->get_in_or_equal(self::COMPONENTS, SQL_PARAMS_NAMED, 'comp');

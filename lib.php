@@ -36,16 +36,26 @@ use mod_adaptivequiz\local\attempt;
  * @param attempt $attempt
  */
 function adaptivequizcatmodel_catquiz_post_create_attempt_callback(stdClass $adaptivequiz, attempt $attempt): void {
+    $attemptid = (int) $attempt->get_attempt()->id;
+    // The request that creates the attempt belongs to it (adapter #6): its trace is written even when the first
+    // item is never selected.
+    adaptivequizcatmodel_catquiz_trace_attempt($attemptid, 0);
+    $meta = ['attemptid' => $attemptid];
     // The share of this sub-plugin in the timeline of CATquiz, where it has one (adapter #6).
-    adaptivequizcatmodel_catquiz_span('adapter:post_create_attempt', function () use ($attempt) {
+    adaptivequizcatmodel_catquiz_span('adapter:post_create_attempt', function () use ($attemptid, $meta) {
         adaptivequizcatmodel_catquiz_span(
             'adapter:create_new_for_attempt',
-            fn() => cat_model_params::create_new_for_attempt($attempt->get_attempt()->id)
+            fn() => cat_model_params::create_new_for_attempt($attemptid),
+            $meta
         );
         // The attempt goes along (local_catquiz #146): only its own state is set up, the other attempts of
         // the session keep theirs. An older CATquiz takes no argument and ignores it.
-        catquiz_handler::prepare_attempt_caches((int) $attempt->get_attempt()->id);
-    });
+        adaptivequizcatmodel_catquiz_span(
+            'adapter:prepare_attempt_caches',
+            fn() => catquiz_handler::prepare_attempt_caches($attemptid),
+            $meta
+        );
+    }, $meta);
 }
 
 /**
@@ -62,6 +72,55 @@ function adaptivequizcatmodel_catquiz_span(string $name, callable $fn, array $me
         return $fn();
     }
     return $timeline::span($name, $fn, $meta);
+}
+
+/**
+ * Attaches a number to the innermost open span of the CATquiz timeline, where there is one (adapter #6).
+ *
+ * @param string $key
+ * @param int|float|bool|null $value
+ */
+function adaptivequizcatmodel_catquiz_note(string $key, $value): void {
+    $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
+    if (class_exists($timeline)) {
+        $timeline::note($key, $value);
+    }
+}
+
+/**
+ * Whether the CATquiz timeline records this request (adapter #6).
+ *
+ * @return bool
+ */
+function adaptivequizcatmodel_catquiz_tracing(): bool {
+    $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
+    return class_exists($timeline) && $timeline::enabled();
+}
+
+/**
+ * Names the attempt the trace of this request belongs to (adapter #6).
+ *
+ * A process that ends several attempts - the scheduled task of the time limit - writes the trace of the
+ * attempt before when it turns to the next one, so each attempt keeps its own trace.
+ *
+ * @param int $attemptid adaptivequiz_attempt.id
+ * @param int $answered Items answered so far.
+ * @param string|null $kind Name of a KIND_ constant of the timeline, e.g. 'KIND_COMPLETE'; an older CATquiz
+ *      without it gets the kind from the number answered.
+ */
+function adaptivequizcatmodel_catquiz_trace_attempt(int $attemptid, int $answered, ?string $kind = null): void {
+    $timeline = '\\local_catquiz\\local\\monitoring\\timeline';
+    if (!adaptivequizcatmodel_catquiz_tracing()) {
+        return;
+    }
+    if (method_exists($timeline, 'current_attempt')) {
+        $current = $timeline::current_attempt();
+        if ($current !== null && $current !== $attemptid) {
+            $timeline::flush();
+        }
+    }
+    $kindvalue = $kind !== null && defined($timeline . '::' . $kind) ? constant($timeline . '::' . $kind) : null;
+    $timeline::attempt($attemptid, $answered, $kindvalue);
 }
 
 /**
@@ -168,12 +227,21 @@ function adaptivequizcatmodel_catquiz_post_complete_attempt_callback(
     stdClass $attempt
 ): void {
     $timefinished = (int) ($attempt->timefinished ?? $attempt->timemodified ?? time());
+    $attemptid = (int) $attempt->id;
 
-    attempt_finalizer::finalize(
-        (int) $attempt->id,
-        $timefinished,
-        (string) ($attempt->attemptstopcriteria ?? '')
-    );
+    // The request that ends the attempt - the last answer, a closing, the time limit - is traced as such, with the
+    // finalisation in it (adapter #6).
+    adaptivequizcatmodel_catquiz_trace_attempt($attemptid, (int) ($attempt->questionsattempted ?? 0), 'KIND_COMPLETE');
+    $meta = ['attemptid' => $attemptid];
+    adaptivequizcatmodel_catquiz_span('adapter:post_complete_attempt', fn() => adaptivequizcatmodel_catquiz_span(
+        'adapter:attempt_finalizer',
+        fn() => attempt_finalizer::finalize(
+            $attemptid,
+            $timefinished,
+            (string) ($attempt->attemptstopcriteria ?? '')
+        ),
+        $meta
+    ), $meta);
 }
 
 /**

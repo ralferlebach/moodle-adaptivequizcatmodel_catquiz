@@ -23,7 +23,6 @@
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration_factory
  */
 
 namespace adaptivequizcatmodel_catquiz\local\catmodel\itemadministration;
