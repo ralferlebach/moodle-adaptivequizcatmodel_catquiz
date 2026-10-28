@@ -1,5 +1,21 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026102800
+
+- Re-Audit 27.10.2026 zu #9: Am Code ändert sich nichts. Neu sind die Nachweise in
+  `doc/evidence/re-audit-2026-10-27/issue-9-evidence.md`. Die Suite lief strikt auf 5.1, 5.2 und 5.3, je mit PostgreSQL
+  und MariaDB, ohne Notices und ohne Deprecations. Außerdem enthalten: die Legacy-Suite auf 4.5 und der Vergleich der
+  Duplizier-Tests mit Legacy.
+
+## Interne Version 2026102600
+
+- Re-Audit 26.10.2026 zu #9: Die Dev-CI prüfte nur Moodle 5.3, und `moodle-plugin-ci phpunit` ließ nur Warnings
+  scheitern. Eine Notice oder Deprecation, wie die von #9, wäre grün durchgegangen. Jetzt läuft die Adapter-Suite auf
+  Moodle 5.1, 5.2 und 5.3, je mit PostgreSQL 17 und MariaDB 11.4, und zusätzlich auf 5.3 mit PHP 8.4. PHPUnit wird
+  direkt mit `--fail-on-notice --fail-on-deprecation` aufgerufen. Lokal ist derselbe Befehl auf allen sechs
+  Kombinationen grün (98 Tests). Mit dem Duplizier-Test vor #9 wird er auf 5.2 und 5.3 rot. Der Langlauf bleibt auf
+  5.3 / PHP 8.3 / PostgreSQL.
+
 ## Interne Version 2026102400
 
 - #9: `tests/backup/duplicate_test.php` duplizierte mit `duplicate_module()` (seit Moodle 5.2 veraltet,

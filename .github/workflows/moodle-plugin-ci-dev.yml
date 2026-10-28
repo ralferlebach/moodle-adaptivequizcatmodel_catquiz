@@ -103,7 +103,7 @@ jobs:
   # phplint is). It runs here, blocking, and this job gates ci-complete. phpmd /
   # phpcpd stay advisory (continue-on-error).
   phpunit:
-    name: "PHPUnit / PHP ${{ matrix.php }} / ${{ matrix.database }}"
+    name: "PHPUnit / ${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }}"
     runs-on: ubuntu-22.04
     needs: [lint-php]
 
@@ -129,10 +129,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Moodle 5.3 needs PHP 8.3 or later; 8.1 and 8.2 could never install.
-          - { php: '8.3', database: pgsql }
-          - { php: '8.3', database: mariadb }
-          - { php: '8.4', database: pgsql }
+          # The line v-3.0 supports Moodle 5.1 to 5.3; every version on both databases (adapter #9: the
+          # duplicate test takes cmactions from 5.2 on and the old functions on 5.1, both ways are run).
+          # Moodle 5.3 needs PHP 8.3 or later; 8.1 and 8.2 could never install. MariaDB 11.4 serves all three.
+          - { moodle: MOODLE_501_STABLE, php: '8.3', database: pgsql }
+          - { moodle: MOODLE_501_STABLE, php: '8.3', database: mariadb }
+          - { moodle: MOODLE_502_STABLE, php: '8.3', database: pgsql }
+          - { moodle: MOODLE_502_STABLE, php: '8.3', database: mariadb }
+          - { moodle: MOODLE_503_STABLE, php: '8.3', database: pgsql }
+          - { moodle: MOODLE_503_STABLE, php: '8.3', database: mariadb }
+          - { moodle: MOODLE_503_STABLE, php: '8.4', database: pgsql }
 
     steps:
       - uses: actions/checkout@v4
@@ -192,16 +198,24 @@ jobs:
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
-          MOODLE_BRANCH: MOODLE_503_STABLE  # Moodle 5.3; seit dem 5. Oktober verzweigt, main ist 5.4dev.
+          MOODLE_BRANCH: ${{ matrix.moodle }}
 
-      - name: PHPUnit tests
+      # Strict (adapter #9): a notice or a deprecation fails the run. A debugging() call of the core - e.g. a
+      # function deprecated in this Moodle version - reaches PHPUnit as a notice of advanced_testcase. moodle-plugin-ci
+      # phpunit knows only --fail-on-warning, so PHPUnit is called directly, with the configuration the install wrote.
+      - name: PHPUnit tests (strict - notices and deprecations fail)
         if: ${{ always() }}
-        run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+        run: |
+          set -o pipefail
+          cd moodle
+          vendor/bin/phpunit --testsuite adaptivequizcatmodel_catquiz_testsuite --testdox \
+            --fail-on-warning --fail-on-notice --fail-on-deprecation --display-notices --display-deprecations \
+            2>&1 | tee ../ci-logs/phpunit.log
 
       # Optional heavy job (adapter #6, audit 18.10.): only on a manual run with longrun = true, on PostgreSQL.
       # A skip is no green: the step fails unless the long run really ran and passed.
       - name: Long run with feedback (160 items, 512 MiB)
-        if: ${{ github.event.inputs.longrun == 'true' && matrix.database == 'pgsql' }}
+        if: ${{ github.event.inputs.longrun == 'true' && matrix.database == 'pgsql' && matrix.moodle == 'MOODLE_503_STABLE' && matrix.php == '8.3' }}
         env:
           CATQUIZ_LONGRUN: '1'
           CATQUIZ_LONGRUN_FEEDBACK: '1'
@@ -216,14 +230,14 @@ jobs:
       - name: Collect error summary
         if: ${{ always() }}
         run: |
-          { echo "job: phpunit (PHP ${{ matrix.php }} / ${{ matrix.database }})"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
+          { echo "job: phpunit (${{ matrix.moodle }} / PHP ${{ matrix.php }} / ${{ matrix.database }})"; echo "status: ${{ job.status }}"; echo "commit: ${{ github.sha }}"; echo "ref: ${{ github.ref }}"; echo ""; echo "Logs:"; ls -1 ci-logs; } > ci-logs/summary.txt
           cat ci-logs/summary.txt
 
       - name: Upload error summary (ZIP)
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: error-summary-dev-phpunit-${{ matrix.php }}-${{ matrix.database }}
+          name: error-summary-dev-phpunit-${{ matrix.moodle }}-${{ matrix.php }}-${{ matrix.database }}
           path: ci-logs
           retention-days: 7
           if-no-files-found: ignore
