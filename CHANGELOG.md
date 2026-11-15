@@ -1,5 +1,28 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111502
+
+Nacharbeitsauftrag 15.11.2026 (Critical-Friend-Re-Audit), Issues #10 und #11. Beschreibung: `deletion-and-orphans.md`.
+
+- #11, Löschen als eine Transaktion (AK7): `attempt_cleanup` löscht alles oder nichts. Ein Fehler in einem Schritt
+  rollt zurück und endet in `cleanup_failed_exception`; die Meldung nennt, was gelöscht werden sollte, und die
+  Ursache. Derselbe Aufruf noch einmal schließt die Löschung ab. Zusammen mit mod_adaptivequiz ab 2026111500
+  (legacy) gilt das für den ganzen Pfad: Aktivität, Versuch und Reset löscht der Host in derselben Transaktion
+  wie der Adapter.
+- #11, Nachweis über die echte Kette (AK3–AK6, DoD1–DoD3): `tests/local/attempt_deletion_chain_test.php`.
+  - Zwei laufende echte Versuche mit gekreuzten Nummern; Löschen über `course_delete_module()`, `delete_course()`,
+    `adaptivequiz_delete_attempt()` und den Reset.
+  - Belegt sind: A vollständig weg, Zeile für Zeile; B und C unverändert; keine neue Waise; B setzt danach im
+    selben CAT-Versuch fort.
+  - Fehler in jedem Schritt; der Fortschritt aus der Zeit vor local_catquiz #101 bleibt (Negativtest).
+  - RED mit dem Callback aus `main`: B verliert seinen Fortschritt, A's bleibt liegen.
+- #11, Inventur (AK8): `cli/orphan_inventory.php` zählt verwaiste Zeilen nach wahrscheinlicher Ursache und Alter.
+  Es liest nur; die Ausgabe enthält keine IDs und keine Personen. Bestand wird nicht verändert.
+- #10: In `moodle-plugin-ci-dev.yml` und `moodle-plugin-ci-main.yml` läuft keine Zelle mehr mit PHP 8.1 oder älter
+  (legacy: 8.1/pgsql → 8.2/pgsql; die zwei 8.1-Zellen der Main-Matrix entfallen). `version.php` bleibt bei seiner
+  Kompatibilitätsangabe.
+- Abhängigkeit: mod_adaptivequiz ab 2026111500.
+
 ## Interne Version 2026111500
 
 - #11 (Nacharbeitsauftrag 15.11.2026): Der Lösch-Callback verwechselt die Versuchs-IDs in diesem Zweig nicht. Seit

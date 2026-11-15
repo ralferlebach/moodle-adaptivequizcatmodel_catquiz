@@ -65,8 +65,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { php: '8.1', moodle-branch: MOODLE_405_STABLE, database: pgsql }
-          - { php: '8.1', moodle-branch: MOODLE_405_STABLE, database: mariadb }
+          # Issue #10: no cell runs PHP 8.1 or older; the functional checks run on 8.2 and 8.3. The
+          # declared compatibility in version.php is unchanged.
           - { php: '8.2', moodle-branch: MOODLE_405_STABLE, database: pgsql }
           - { php: '8.2', moodle-branch: MOODLE_405_STABLE, database: mariadb }
           - { php: '8.3', moodle-branch: MOODLE_405_STABLE, database: pgsql }

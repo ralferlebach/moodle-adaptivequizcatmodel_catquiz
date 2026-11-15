@@ -129,7 +129,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { php: '8.1', database: pgsql }
+          # Issue #10: no cell runs PHP 8.1 or older. 8.2 takes PostgreSQL over from 8.1, so the lowest
+          # PHP of the line still runs on both databases.
+          - { php: '8.2', database: pgsql }
           - { php: '8.2', database: mariadb }
           - { php: '8.3', database: pgsql }
 
