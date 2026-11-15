@@ -24,6 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+$string['cleanupfailed'] = 'The CATquiz data of {$a->what} could not be deleted. Nothing was deleted: the data is as before and the deletion can run again. Cause: {$a->cause}';
 $string['formelementnegative'] = 'Input a positive number from 1 to 999';
 $string['formlowlevelgreaterthan'] = 'Lowest level must be less than highest level';
 $string['itemadministration:stopbecauseincorrectanswer'] = 'You have answered incorrectly, so we stopped the attempt, sorry :P';

@@ -22,6 +22,7 @@ of an adaptive quiz.
 ## Documentation
 
 * `CHANGELOG.md` - changes per internal version.
+* `deletion-and-orphans.md` - what a deletion removes, what stays, and the read-only orphan inventory (#11).
 * `legacy-recovery.md` - how results of older attempts are recovered.
 * `doc/` - further notes.
 
