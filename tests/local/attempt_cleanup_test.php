@@ -172,6 +172,41 @@ final class attempt_cleanup_test extends advanced_testcase {
     }
 
     /**
+     * Running the cleanup again - a retry after a partial failure, a second delete event - changes nothing
+     * further and never reaches the other activity (issue #11).
+     */
+    public function test_cleanup_is_idempotent(): void {
+        $a = $this->setup['A'];
+        attempt_cleanup::delete_for_instance((int) $a['adaptivequiz']->id);
+        $this->assert_cat_data('A', false);
+        $this->assert_cat_data('B', true);
+
+        attempt_cleanup::delete_for_instance((int) $a['adaptivequiz']->id);
+        attempt_cleanup::delete_for_host_attempts([(int) $a['attempt']->id]);
+        $this->assert_cat_data('A', false);
+        $this->assert_cat_data('B', true);
+    }
+
+    /**
+     * The same person in both activities: deleting A keeps the person's results from B, which later attempts
+     * may use as their prior (issue #11, no foreign rows).
+     */
+    public function test_same_person_keeps_the_results_of_the_other_activity(): void {
+        global $DB;
+        $b = $this->setup['B'];
+        $useraid = (int) $this->setup['A']['user']->id;
+        $DB->set_field('local_catquiz_attempts', 'userid', $useraid, ['id' => $b['catid']]);
+        $DB->set_field('local_catquiz_progress', 'userid', $useraid, ['attemptid' => $b['catid']]);
+        $DB->set_field('local_catquiz_personparams', 'userid', $useraid, ['attemptid' => $b['catid']]);
+
+        adaptivequiz_delete_instance((int) $this->setup['A']['adaptivequiz']->id);
+
+        $this->assert_cat_data('A', false);
+        $this->assert_cat_data('B', true);
+        $this->assertSame(1, $DB->count_records('local_catquiz_personparams', ['userid' => $useraid]));
+    }
+
+    /**
      * Deleting one attempt removes its CATquiz data only.
      */
     public function test_deleting_an_attempt(): void {
