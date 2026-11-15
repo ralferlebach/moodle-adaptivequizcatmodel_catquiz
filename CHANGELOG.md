@@ -1,5 +1,16 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111500
+
+- #11 (Nacharbeitsauftrag 15.11.2026): Der Lösch-Callback verwechselt die Versuchs-IDs in diesem Zweig nicht. Seit
+  2026101701 (#9) bestimmt `attempt_cleanup` die internen CAT-Versuche (`local_catquiz_attempts.id`) über die
+  Host-Versuche der Instanz und löscht Fortschritt und Ergebnisse über diese interne ID; Kollisionen der beiden
+  Namensräume sind getestet. Der beanstandete Code steht im Zweig `main` (2026082704); dort passt er zu dessen
+  `local_catquiz` (Fortschritt über die Host-ID) und ist nur in Kombination mit `local_catquiz` ab 2026101701
+  falsch. Instanzen mit Adapter vor 2026101701 und Engine ab 2026100922 (z. B. CLARA) brauchen dieses Update.
+- Neue Tests: Bereinigung idempotent bei Wiederholung; dieselbe Person in beiden Aktivitäten behält ihre Ergebnisse
+  aus der anderen. Zahntest: zusätzliches Löschen des Fortschritts über die Host-ID macht 5 von 6 Tests rot.
+
 ## Interne Version 2026101801
 
 - local_catquiz #126 (Nacharbeitsauftrag 18.10.2026): Reproducer `tests/duplicate_question_reproducer_test.php`
