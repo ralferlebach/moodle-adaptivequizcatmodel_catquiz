@@ -402,6 +402,23 @@ final class attempt_deletion_chain_test extends advanced_testcase {
     }
 
     /**
+     * Deletes a course module the way the running Moodle version wants it.
+     *
+     * Moodle 5.2 deprecates course_delete_module() in favour of core_courseformat\local\cmactions::delete();
+     * 5.1 does not have the latter.
+     *
+     * @param int $cmid
+     * @param int $courseid
+     */
+    private static function delete_module(int $cmid, int $courseid): void {
+        if (method_exists(\core_courseformat\local\cmactions::class, 'delete')) {
+            \core_courseformat\formatactions::cm($courseid)->delete($cmid);
+        } else {
+            course_delete_module($cmid);
+        }
+    }
+
+    /**
      * Deleting A by one of the paths.
      *
      * @param string $path activity, course, attempt or reset
@@ -411,7 +428,7 @@ final class attempt_deletion_chain_test extends advanced_testcase {
         [$adaptivequiz] = $this->act['A'];
         switch ($path) {
             case 'activity':
-                course_delete_module((int) $adaptivequiz->cm->id);
+                self::delete_module((int) $adaptivequiz->cm->id, (int) $adaptivequiz->course);
                 break;
             case 'course':
                 delete_course((int) $adaptivequiz->course, false);

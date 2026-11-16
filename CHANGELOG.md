@@ -1,5 +1,11 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111600
+
+CI vom 16.11.2026: `attempt_deletion_chain_test` löscht die Aktivität ab Moodle 5.2 über `core_courseformat`
+(`formatactions::cm()->delete()`), weil `course_delete_module()` dort veraltet ist und die strenge Zelle an der
+Deprecation scheiterte. Auf 5.1 bleibt es bei `course_delete_module()`. Am Plugin-Code ändert sich nichts.
+
 ## Interne Version 2026111503
 
 Nacharbeitsauftrag 15.11.2026 (Critical-Friend-Re-Audit), Issues #10 und #11. Beschreibung: `deletion-and-orphans.md`.
