@@ -1,5 +1,14 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111701
+
+CI vom 17.11.2026: Der Adapter war vor dem Host gepusht worden. Seine CI klonte deshalb den alten Host-Stand und
+scheiterte an Klassen und Konstanten, die erst der neue Host mitbringt (21 Fehler, 33 Fehlschläge, alle
+`test_information_source` bzw. `stop_reason::SCALES_COMPLETE`). Neu: `.github/scripts/await_host_version.sh` liest die
+in `version.php` verlangte Host-Version (2026111700) und wartet bis zu 15 Minuten, bis der Host-Zweig sie trägt. Danach
+bricht der Lauf mit einer klaren Meldung zur Push-Reihenfolge ab. Ein beim manuellen Lauf festgelegter Host wird
+nicht abgewartet. Am Plugin-Code ändert sich nichts.
+
 ## Interne Version 2026111700
 
 Issues vom 16.11.2026. Abhängigkeit: mod_adaptivequiz ab 2026111700.
