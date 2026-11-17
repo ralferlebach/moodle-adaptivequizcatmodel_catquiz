@@ -1,5 +1,18 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111700
+
+Issues vom 16.11.2026. Abhängigkeit: mod_adaptivequiz ab 2026111700.
+
+- #12 (P0, Stoppvertrag): `noremainingquestionsbeforeminimum` wird zum eigenen Host-Code `noeligiblebeforeminimum`
+  (vorher wie „nach dem Minimum“). `stopscalescomplete` (local_catquiz #172) wird zu `scalescomplete`. Ein
+  unbekannter Status bleibt neutral. Der Vertrag mit allen Codes, ihrer Bedeutung und der Trennung von Stoppcode und
+  Ergebnisgültigkeit steht in `stop-contract.md`.
+- mod_adaptivequiz #25: Der Ergebnis-Provider liefert die Testinformation der Itembatterie der Aktivität für die
+  Fisher-Rao-Linkfunktion. Das sind die Items mit aktiven Parametern der Testskala und ihrer Teilskalen im CAT-Kontext
+  des Tests, wie aktuell kalibriert. Test auf der Simulationskalibrierung: positive Information, Fisher-Rao gegen eine
+  feste Simpson-Regel, Wirkung einer geänderten Itemauswahl.
+
 ## Interne Version 2026111502
 
 Nacharbeitsauftrag 15.11.2026 (Critical-Friend-Re-Audit), Issues #10 und #11. Beschreibung: `deletion-and-orphans.md`.

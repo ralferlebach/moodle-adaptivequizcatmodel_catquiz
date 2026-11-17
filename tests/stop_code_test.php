@@ -39,9 +39,13 @@ final class stop_code_test extends advanced_testcase {
         return [
             'maximum' => [status::ERROR_REACHED_MAXIMUM_QUESTIONS, stop_reason::MAXIMUM],
             'precision' => [status::STOP_TARGET_PRECISION, stop_reason::TARGET_PRECISION],
+            'every scale done (local_catquiz #172)' => [status::STOP_SCALES_COMPLETE, stop_reason::SCALES_COMPLETE],
             'estimate stable' => [status::ABORT_PERSONABILITY_NOT_CHANGED, stop_reason::TARGET_PRECISION],
             'pool empty' => [status::ERROR_NO_REMAINING_QUESTIONS, stop_reason::NO_ELIGIBLE],
-            'pool empty before minimum' => [status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM, stop_reason::NO_ELIGIBLE],
+            'pool empty before minimum' => [
+                status::ERROR_NO_REMAINING_QUESTIONS_BEFORE_MINIMUM,
+                stop_reason::NO_ELIGIBLE_BEFORE_MINIMUM,
+            ],
             'no items' => [status::ERROR_NO_ITEMS, stop_reason::NO_ELIGIBLE],
             'no first question' => [status::ERROR_EMPTY_FIRST_QUESTION_LIST, stop_reason::NO_ELIGIBLE],
             'time in the attempt' => [status::EXCEEDED_MAX_ATTEMPT_TIME, stop_reason::TIMELIMIT],
@@ -84,8 +88,8 @@ final class stop_code_test extends advanced_testcase {
             }
             $this->assertContains(
                 stop_code::from_status($value),
-                [stop_reason::MAXIMUM, stop_reason::TARGET_PRECISION, stop_reason::TIMELIMIT, stop_reason::NO_ELIGIBLE,
-                    stop_reason::ERROR],
+                [stop_reason::MAXIMUM, stop_reason::TARGET_PRECISION, stop_reason::SCALES_COMPLETE, stop_reason::TIMELIMIT,
+                    stop_reason::NO_ELIGIBLE, stop_reason::NO_ELIGIBLE_BEFORE_MINIMUM, stop_reason::ERROR],
                 "Status $name has no code of the activity."
             );
         }
