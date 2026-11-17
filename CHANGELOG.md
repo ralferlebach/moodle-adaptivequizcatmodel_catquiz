@@ -1,10 +1,27 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111702
+
+Re-Audit vom 17.11.2026 (local_catquiz #172 DoD1/DoD3, Adapter #12, Host #23). Abhängigkeit unverändert: mod_adaptivequiz
+ab 2026111700.
+
+- Neu `tests/scale_set_complete_replay_test.php`: die beiden Versuche aus #172 als Replays durch Host, Adapter,
+  Engine und Frage-Usage, ohne Mocks. RELSUBS endet nach 17, LOWESTSUB nach 16 von höchstens 25 Fragen (12 bis 25,
+  3 bis 5 je Skala, kein Host-Minimum), jeweils mit leerem aktiven Skalensatz nach dem Minimum. Geprüft werden Engine-
+  und Host-Stoppgrund (`stopscalescomplete` / `scalescomplete`), die Länge, die Frage-Usage (ein Slot je Antwort, keine
+  Frage doppelt, keine nach dem Ende), genau ein Abschluss-Ereignis, das Ergebnis aus den Endwerten des CAT-Versuchs,
+  die Note im Gradebook und der Abschluss nach der Regel „gültiges Ergebnis“. Die Antworten der Produktionsversuche
+  sind nicht öffentlich; die Replays bilden ihre Form auf dem Simulations-Pool nach.
+  - Rot vor dem Fix: Mit dem Rückfall von 2026100922 enden beide mit Host-Code `error`, mit dem Stand 2026111600 mit
+    `noeligiblequestions`.
+- CI: Das Warte-Skript heißt jetzt `.github/scripts/await_dependencies.sh` und ist dasselbe wie in local_catquiz;
+  Selbsttest im Job „PHP lint“.
+
 ## Interne Version 2026111701
 
 CI vom 17.11.2026: Der Adapter war vor dem Host gepusht worden. Seine CI klonte deshalb den alten Host-Stand und
 scheiterte an Klassen und Konstanten, die erst der neue Host mitbringt (21 Fehler, 33 Fehlschläge, alle
-`test_information_source` bzw. `stop_reason::SCALES_COMPLETE`). Neu: `.github/scripts/await_host_version.sh` liest die
+`test_information_source` bzw. `stop_reason::SCALES_COMPLETE`). Neu: `.github/scripts/await_host_version.sh` (ab der nächsten Version `await_dependencies.sh`) liest die
 in `version.php` verlangte Host-Version (2026111700) und wartet bis zu 15 Minuten, bis der Host-Zweig sie trägt. Danach
 bricht der Lauf mit einer klaren Meldung zur Push-Reihenfolge ab. Ein beim manuellen Lauf festgelegter Host wird
 nicht abgewartet. Am Plugin-Code ändert sich nichts.
