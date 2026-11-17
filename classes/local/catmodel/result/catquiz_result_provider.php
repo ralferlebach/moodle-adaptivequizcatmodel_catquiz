@@ -17,12 +17,14 @@
 namespace adaptivequizcatmodel_catquiz\local\catmodel\result;
 
 use local_catquiz\catscale;
+use local_catquiz\local\model\model_item_param_list;
 use local_catquiz\local\result\global_scale_validity;
 use local_catquiz\local\result\personparam_repository;
 use local_catquiz\teststrategy\progress;
 use mod_adaptivequiz\local\result\attempt_result;
 use mod_adaptivequiz\local\result\result_definition;
 use mod_adaptivequiz\local\result\result_provider;
+use mod_adaptivequiz\local\result\test_information_source;
 use stdClass;
 
 /**
@@ -47,7 +49,7 @@ use stdClass;
  * @copyright  2026 onwards Ralf Erlebach
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-final class catquiz_result_provider implements result_provider {
+final class catquiz_result_provider implements result_provider, test_information_source {
     /** @var string The attempt has not been finalised by CATquiz. */
     public const REASON_NOT_FINALISED = 'not_finalised';
 
@@ -95,6 +97,40 @@ final class catquiz_result_provider implements result_provider {
         $label = get_string('resultsource', 'adaptivequizcatmodel_catquiz', $name);
 
         return new result_definition(true, $range[0] ?? null, $range[1] ?? null, $label);
+    }
+
+    /**
+     * The test information of the activity's item battery, for the Fisher-Rao link function (mod_adaptivequiz #25).
+     *
+     * The battery is the one CATquiz administers the test from: the items with active parameters of the test's scale
+     * and its subscales in the test's CAT context, as calibrated now - the same list CATquiz sums for its own test
+     * information (catscale::get_testinformation()). Items and settings are not versioned.
+     *
+     * @param stdClass $adaptivequiz
+     * @return \Closure|null I_B(t); null without a scale, a context or items.
+     */
+    public function test_information(stdClass $adaptivequiz): ?\Closure {
+        global $DB;
+        $scaleid = self::scale_of($adaptivequiz);
+        if (!$scaleid) {
+            return null;
+        }
+        $instanceid = $adaptivequiz->id ?? $adaptivequiz->instance ?? null;
+        $contextid = $instanceid ? (int) $DB->get_field(
+            'local_catquiz_tests',
+            'contextid',
+            ['component' => 'mod_adaptivequiz', 'componentid' => $instanceid],
+            IGNORE_MULTIPLE
+        ) : 0;
+        $contextid = $contextid ?: (int) catscale::get_context_id($scaleid);
+        if (!$contextid) {
+            return null;
+        }
+        $items = model_item_param_list::get($contextid, null, [$scaleid, ...catscale::get_subscale_ids($scaleid)]);
+        if (count($items) === 0) {
+            return null;
+        }
+        return fn(float $t): float => (float) catscale::get_testinformation($t, $items);
     }
 
     /**

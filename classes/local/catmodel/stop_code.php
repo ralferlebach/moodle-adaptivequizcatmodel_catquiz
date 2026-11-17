@@ -33,8 +33,11 @@ final class stop_code {
         'stoptargetprecision' => 'targetprecision',
         // The estimate no longer moves: as good as it gets - precise enough, not out of questions.
         'abortpersonabilitynotchanged' => 'targetprecision',
+        // Every measured scale is done after the minimum: a regular end of its own (local_catquiz #172).
+        'stopscalescomplete' => 'scalescomplete',
         'noremainingquestions' => 'noeligiblequestions',
-        'noremainingquestionsbeforeminimum' => 'noeligiblequestions',
+        // Before the minimum: a code of its own (adapter #12). Neither it nor any other code says the result is valid.
+        'noremainingquestionsbeforeminimum' => 'noeligiblebeforeminimum',
         'errornoitems' => 'noeligiblequestions',
         'emptyfirstquestionlist' => 'noeligiblequestions',
         'exceededmaxattempttime' => 'timelimit',

@@ -1,5 +1,18 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111701
+
+Issues vom 16.11.2026. Abhängigkeit: mod_adaptivequiz ab 2026111701.
+
+- #12 (P0, Stoppvertrag): `noremainingquestionsbeforeminimum` wird zum eigenen Host-Code `noeligiblebeforeminimum`
+  (vorher wie „nach dem Minimum“). `stopscalescomplete` (local_catquiz #172) wird zu `scalescomplete`. Ein
+  unbekannter Status bleibt neutral. Der Vertrag mit allen Codes, ihrer Bedeutung und der Trennung von Stoppcode und
+  Ergebnisgültigkeit steht in `stop-contract.md`.
+- mod_adaptivequiz #25: Der Ergebnis-Provider liefert die Testinformation der Itembatterie der Aktivität für die
+  Fisher-Rao-Linkfunktion. Das sind die Items mit aktiven Parametern der Testskala und ihrer Teilskalen im CAT-Kontext
+  des Tests, wie aktuell kalibriert. Test auf der Simulationskalibrierung: positive Information, Fisher-Rao gegen eine
+  feste Simpson-Regel, Wirkung einer geänderten Itemauswahl.
+
 ## Interne Version 2026111600
 
 CI vom 16.11.2026: `attempt_deletion_chain_test` löscht die Aktivität ab Moodle 5.2 über `core_courseformat`

@@ -17,8 +17,9 @@
  * User stories of the activity driven by the CATquiz CAT model.
  *
  * These need all three plugins installed: mod_adaptivequiz, adaptivequizcatmodel_catquiz and
- * local_catquiz. They live here, in the adapter, because it is the only one of the three that may
- * know both the host and CATquiz; the host keeps no reference to a real CAT model (host issue #10).
+ * local_catquiz. They live here, in the adapter, because it was the only one of the three allowed to know
+ * both the host and CATquiz (host issue #10); that rule is lifted (host issue #24), the tests stay here until
+ * the move to mod_catquiz.
  * Run them from the host's Playwright setup, which provides the helpers and the site seed. They walk what the contract between them is supposed to produce - a CAT model
  * takes over question selection, the built-in report disappears, the CAT model's own feedback and
  * report take its place.

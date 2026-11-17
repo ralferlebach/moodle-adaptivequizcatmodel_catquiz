@@ -1,0 +1,52 @@
+# Stoppvertrag CATquiz → Adapter → mod_adaptivequiz (Adapter-Issue #12)
+
+Stand 17.11.2026. Gilt für beide Linien. Eine Stelle übersetzt: `classes/local/catmodel/stop_code.php`.
+
+## 1. Grundsätze
+
+- **Ein Stoppcode sagt, warum ein Test endete, nicht ob das Ergebnis gilt.**
+  - Die Gültigkeit kommt getrennt über den Ergebnis-Provider (`catquiz_result_provider`) in den Snapshot des Hosts:
+    `resultvalid`, `resultstatus`, `resultreason`.
+  - Bewertungsübersicht und Abschluss lesen nur den Snapshot (Host #14), nie den Stoppcode.
+- **Ein technischer Fehler bleibt als Fehler erkennbar** (`error`). Keine Übersetzung macht aus `error` oder dem
+  historischen CAT-Status -1 einen fachlichen Erfolg.
+- **Ein unbekannter Status behält seinen Namen.** Der Host zeigt dazu einen neutralen Hinweis, nie den Hinweis eines
+  regulären Endes. Ein leerer oder fehlender Status ergibt keinen Code.
+- **Kein Bestand wird umgedeutet.** Gespeicherte Stoppcodes und CAT-Status bleiben, wie sie sind; es gibt keine
+  Neubewertung durch diesen Vertrag.
+
+## 2. Tabelle
+
+| CATquiz-Status (`local_catquiz\local\status`) | Nr. | Host-Code (`stop_reason`) | Hinweis | Bedeutung |
+|---|---|---|---|---|
+| `reachedmaximumquestions` | 4 | `maximumquestions` | keiner | Regulär: die Höchstzahl an Fragen ist erreicht |
+| `stoptargetprecision` | 11 | `targetprecision` | Info | Regulär: die Hauptskala ist vor der Höchstzahl genau genug gemessen |
+| `abortpersonabilitynotchanged` | 5 | `targetprecision` | Info | Regulär: die Schätzung bewegt sich nicht mehr; so genau, wie es mit dem Pool geht – nicht „keine Fragen mehr“ |
+| `stopscalescomplete` | 13 | `scalescomplete` | Info | Regulär (local_catquiz #172): jede gemessene Skala ist nach ihrer eigenen Regel fertig, das Minimum ist erreicht |
+| `noremainingquestions` | 1 | `noeligiblequestions` | Info | Keine passende Frage mehr, nach dem Minimum |
+| `noremainingquestionsbeforeminimum` | 10 | `noeligiblebeforeminimum` | Info | Keine passende Frage mehr **vor** dem Minimum (#12 AK2); über die Gültigkeit entscheidet der Snapshot |
+| `errornoitems` | 7 | `noeligiblequestions` | Info | Keine Items mit Parametern für die gewählten Skalen |
+| `emptyfirstquestionlist` | 6 | `noeligiblequestions` | Info | Keine erste Frage verfügbar |
+| `exceededmaxattempttime` | 8 | `timelimit` | Info | Zeit im Versuch abgelaufen |
+| `attemptclosedbytimelimit` | 9 | `timelimit` | Info | Vom Task nach Ablauf geschlossen |
+| `error` | 12 | `error` | Fehler | Technischer Fehler |
+| `errorfetchnextquestion` | 3 | `error` | Fehler | Technischer Fehler beim Holen der nächsten Frage |
+| `testiteminrelatedscale` | 2 | `error` | Fehler | Konfigurationsfehler |
+| `statusundefined` | -1 | – | – | Historisch, z. B. der Fallback vor 2026100922. Wird nicht übersetzt; der gespeicherte Host-Code bleibt |
+| unbekannt | – | eigener Name | neutral | Ein neuerer CATquiz-Status, den dieser Adapter noch nicht kennt |
+
+## 3. Nachweise
+
+- `tests/stop_code_test.php`:
+  - jede Zeile der Tabelle;
+  - leerer, fehlender und unbekannter Status;
+  - jeder Status von `local_catquiz\local\status` ist einem Host-Code zugeordnet.
+- Host `tests/local/attempt/stop_notice_test.php`: Hinweisart und Text je Code.
+- local_catquiz `tests/teststrategy/strategy_semantics_test.php` und `end_without_question_test.php` (#172): welcher
+  Status wann entsteht.
+
+## 4. Kompatibilität
+
+- Ein Host vor 2026111701 (v-3.0) bzw. 2026111700 (Legacy) kennt `scalescomplete` und `noeligiblebeforeminimum`
+  nicht und zeigt dafür den neutralen Hinweis.
+- Der Adapter verlangt die neuen Host-Versionen.
