@@ -24,7 +24,7 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version = 2026111701;
+$plugin->version = 2026111702;
 $plugin->release = '1.3.0';
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->requires = 2025100600;
@@ -34,6 +34,7 @@ $plugin->component = 'adaptivequizcatmodel_catquiz';
 // declaring the other direction as well would make the pair uninstallable.
 $plugin->dependencies = [
     // 2026100902 brings the result contract (mod_adaptivequiz issue #14), which this subplugin implements;
-    // 2026100906 the stop codes of issue #20, which this subplugin hands over.
+    // 2026100906 the stop codes of issue #20, which this subplugin hands over; 2026111701 the test information
+    // source (mod_adaptivequiz #25) and the stop codes scalescomplete and noeligiblebeforeminimum (#12).
     'mod_adaptivequiz' => 2026111701,
 ];
