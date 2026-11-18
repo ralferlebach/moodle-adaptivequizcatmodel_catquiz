@@ -35,7 +35,25 @@ Stand 17.11.2026. Gilt für beide Linien. Eine Stelle übersetzt: `classes/local
 | `statusundefined` | -1 | – | – | Historisch, z. B. der Fallback vor 2026100922. Wird nicht übersetzt; der gespeicherte Host-Code bleibt |
 | unbekannt | – | eigener Name | neutral | Ein neuerer CATquiz-Status, den dieser Adapter noch nicht kennt |
 
-## 3. Nachweise
+## 3. Technischer Fehler und Gültigkeit (Host #23, Stand 18.11.2026)
+
+Ursache und Gültigkeit sind getrennt modelliert:
+
+| Fall | `stopcode` | CAT-Status | Gültigkeit (`resultvalid`) | Note | Abschluss |
+|---|---|---|---|---|---|
+| Technischer Fehler vor dem Minimum | `error` | 12 | 0 (`min_questions_not_reached` u. a.) | keine | nicht erfüllt |
+| Technischer Fehler nach dem Minimum, Messung gültig | `error` | 12 | 1 (aus der Messung) | genau eine | erfüllt |
+| Technischer Fehler nach dem Minimum, Messung ungültig | `error` | 12 | 0 (Grund der Messung) | keine | nicht erfüllt |
+
+- Der Stoppcode bleibt `error` – ein technischer Abbruch wird nie als reguläres Ende angezeigt.
+- Die Gültigkeit entscheidet allein die finalisierte Messung (Engine-Validator → Snapshot); Note und Abschluss lesen
+  nur den Snapshot. Genau eine Finalisierung, genau ein Abschluss-Ereignis; eine zweite Finalisierung ändert nichts.
+- Beleg: `tests/scale_set_complete_replay_test.php::test_a_technical_error_ends_the_attempt_once` (echter Fehler: die
+  Itemparameter verschwinden unter dem laufenden Versuch, die Engine endet mit `error`), beide Fälle vor/nach dem
+  Minimum; der Fall „nach dem Minimum“ ergibt im Replay eine gültige Messung mit Note und Abschluss.
+- Die fachliche Freigabe dieser Regel (gültige Messung trotz technischem Ende zählt) liegt beim Projektverantwortlichen.
+
+## 4. Nachweise
 
 - `tests/stop_code_test.php`:
   - jede Zeile der Tabelle;
@@ -45,7 +63,7 @@ Stand 17.11.2026. Gilt für beide Linien. Eine Stelle übersetzt: `classes/local
 - local_catquiz `tests/teststrategy/strategy_semantics_test.php` und `end_without_question_test.php` (#172): welcher
   Status wann entsteht.
 
-## 4. Kompatibilität
+## 5. Kompatibilität
 
 - Ein Host vor 2026111701 (v-3.0) bzw. 2026111700 (Legacy) kennt `scalescomplete` und `noeligiblebeforeminimum`
   nicht und zeigt dafür den neutralen Hinweis.
