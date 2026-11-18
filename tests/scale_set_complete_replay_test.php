@@ -227,6 +227,19 @@ final class scale_set_complete_replay_test extends advanced_testcase {
         }
         $this->assertCount(count(array_unique(array_map(fn($r) => (int) $r->catscaleid, $rows))), $rows, 'One row per scale.');
 
+        // Engine #174: the global scale is part of the result - with its own estimate, every productive answer
+        // counted once, and its standard error - although the strategy reports a subscale.
+        $rootid = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => 'Simulation']);
+        $root = array_values(array_filter($rows, fn($r) => (int) $r->catscaleid === $rootid));
+        $this->assertCount(1, $root, 'The global scale has its result row.');
+        $progress = \local_catquiz\teststrategy\progress::load_for_reading((int) $catattempt->id);
+        $this->assertNotNull($progress);
+        $this->assertSame($progress->get_num_answered_productive_questions(), (int) $root[0]->n);
+        $this->assertSame($progress->get_num_answered_productive_questions($rootid), (int) $root[0]->n);
+        // Stored with the precision of the results (two decimals, as the feedback rounds them).
+        $this->assertEqualsWithDelta($progress->get_abilities()[$rootid], (float) $root[0]->ability, 0.005 + 1e-9);
+        $this->assertNotNull($root[0]->standarderror);
+
         // Reconciliation: finalising again changes nothing - no second result, grade or completion.
         $fingerprint = json_encode($rows, JSON_PRESERVE_ZERO_FRACTION);
         \local_catquiz\local\attempt\attempt_finalizer::finalize((int) $attempt->id, (int) $attempt->timefinished);
@@ -243,6 +256,122 @@ final class scale_set_complete_replay_test extends advanced_testcase {
             'eventname' => '\mod_adaptivequiz\event\attempt_completed', 'objectid' => $attempt->id,
         ]), 'Still completed once.');
 
+        $this->resetDebugging();
+    }
+
+    /**
+     * Cases of a technical error (host #23, engine #172, adapter #12): before the minimum and after it.
+     *
+     * @return array
+     */
+    public static function technical_errors(): array {
+        return [
+            'technical error before the minimum' => ['10', false],
+            'technical error after the minimum' => ['10011010101110', null],
+        ];
+    }
+
+    /**
+     * Host #23: a technical error ends the attempt as an error - never as a regular end - and the cause and the
+     * validity are apart: the snapshot decides validity from the measurement, grade and completion follow the
+     * snapshot, and the attempt is finalised and completed exactly once. The error is real: the item parameters of
+     * the test disappear under the running attempt, and the engine fails with its general error.
+     *
+     * @dataProvider technical_errors
+     * @param string $answers The answers before the error.
+     * @param bool|null $valid The expected validity; null where the measurement decides.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('technical_errors')]
+    public function test_a_technical_error_ends_the_attempt_once(string $answers, ?bool $valid): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->preventResetByRollback();
+        set_config('enabled_stores', 'logstore_standard', 'tool_log');
+        set_config('buffersize', 0, 'logstore_standard');
+        get_log_manager(true);
+        $scenario = trace_scenario::create($this->getDataGenerator(), true, [
+            'cateststrategyid' => LOCAL_CATQUIZ_STRATEGY_RELSUBS,
+            'catquiz_minquestions' => 12,
+            'catquiz_maxquestions' => 25,
+            'catquiz_minquestionspersubscale' => 3,
+            'catquiz_maxquestionspersubscale' => 5,
+            'catquiz_standarderror_min' => 0.0001,
+            'catquiz_standarderror_max' => 1.0,
+            'catquiz_includetimelimit' => 0,
+        ], 25);
+        $this->select_scales($scenario, ['Simulation', 'SimC', 'SimC01', 'SimC02', 'SimC03', 'SimC04', 'SimC05']);
+        $DB->set_field('adaptivequiz', 'minimumquestions', 0, ['id' => $scenario->adaptivequiz->id]);
+        $course = $this->enable_completion($scenario);
+        $this->setUser($scenario->userid);
+        $shown = request_simulator::request($scenario->adaptivequiz, $scenario->context, $scenario->userid, null);
+        for ($i = 0; $i < strlen($answers) - 1; $i++) {
+            $shown = request_simulator::request(
+                $scenario->adaptivequiz,
+                $scenario->context,
+                $scenario->userid,
+                $answers[$i] === '1'
+            );
+            $this->assertFalse($shown['stopped'], 'Still running before the error.');
+        }
+
+        // The error: the parameters of the items disappear; the next request fails in the engine.
+        $DB->delete_records('local_catquiz_itemparams');
+        \cache_helper::purge_all();
+        $shown = request_simulator::request(
+            $scenario->adaptivequiz,
+            $scenario->context,
+            $scenario->userid,
+            $answers[strlen($answers) - 1] === '1'
+        );
+        $this->assertTrue($shown['stopped'], 'The error ends the attempt.');
+        $this->setAdminUser();
+
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['instance' => $scenario->adaptivequiz->id], '*', MUST_EXIST);
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attempt->id], '*', MUST_EXIST);
+        // The cause: an error, in the engine and in the host - not a regular end, not an empty pool.
+        $this->assertSame(status::to_int(status::ERROR_GENERAL), (int) $catattempt->status);
+        $this->assertSame('error', $attempt->stopcode);
+        $this->assertSame(strlen($answers), (int) $attempt->questionsattempted);
+        // Finalised once, completed once.
+        $this->assertSame('complete', $attempt->attemptstate);
+        $this->assertNotEmpty($catattempt->endtime);
+        $this->assertSame(1, $DB->count_records('logstore_standard_log', [
+            'eventname' => '\mod_adaptivequiz\event\attempt_completed', 'objectid' => $attempt->id,
+        ]));
+        // The validity: from the measurement, apart from the cause.
+        $result = \local_catquiz\local\result\attempt_result_validator::validate((int) $attempt->id);
+        $this->assertSame($result->is_valid() ? 1 : 0, (int) $attempt->resultvalid, 'The snapshot is the measurement.');
+        if ($valid !== null) {
+            $this->assertSame($valid, (bool) $attempt->resultvalid, (string) $attempt->resultreason);
+        }
+        $rootid = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => 'Simulation']);
+        $this->assertTrue($DB->record_exists(
+            'local_catquiz_personparams',
+            ['attemptid' => $catattempt->id, 'catscaleid' => $rootid]
+        ), 'Engine #174: the global scale has its row.');
+
+        // Grade and completion follow the snapshot - no grade and no completion for an invalid result, exactly one
+        // grade and the completion for a valid one.
+        $item = \grade_item::fetch(['itemtype' => 'mod', 'itemmodule' => 'adaptivequiz',
+            'iteminstance' => $scenario->adaptivequiz->id, 'courseid' => $scenario->adaptivequiz->course]);
+        $grades = $DB->get_records_select(
+            'grade_grades',
+            'itemid = ? AND userid = ? AND finalgrade IS NOT NULL',
+            [$item->id, $scenario->userid]
+        );
+        $this->assertCount((int) $attempt->resultvalid, $grades, 'A grade exactly for a valid result.');
+        $cm = get_fast_modinfo($course)->get_cm($scenario->adaptivequiz->cm->id);
+        $data = (new completion_info($course))->get_data($cm, false, $scenario->userid);
+        $this->assertSame(
+            (int) $attempt->resultvalid === 1 ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE,
+            (int) $data->completionstate
+        );
+        // Finalising again changes nothing.
+        $this->assertFalse(\local_catquiz\local\attempt\attempt_finalizer::finalize(
+            (int) $attempt->id,
+            (int) $attempt->timefinished
+        ));
         $this->resetDebugging();
     }
 

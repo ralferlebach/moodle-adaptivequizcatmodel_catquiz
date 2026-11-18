@@ -1,5 +1,18 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111705
+
+Re-Audit Restarbeiten 18.11.2026. Setzt local_catquiz mit #174 voraus (1.3: 2026111706, 1.2: 2026111705).
+
+- `tests/scale_set_complete_replay_test.php`:
+  - Engine #174: in den Replays RELSUBS 17 und LOWESTSUB 16 hat die Globalskala ihre Ergebniszeile mit eigener
+    Schätzung, N aller produktiven Antworten und SE.
+  - Host #23 / Engine #172 / Adapter #12: neuer Fall `test_a_technical_error_ends_the_attempt_once` – ein echter
+    technischer Fehler (Itemparameter verschwinden unter dem laufenden Versuch) vor und nach dem Minimum. Stoppcode
+    `error`, CAT-Status 12, genau eine Finalisierung und ein Abschluss-Ereignis; Gültigkeit aus der Messung, Note und
+    Abschluss genau für ein gültiges Ergebnis.
+- `stop-contract.md` §3: technischer Fehler und Gültigkeit.
+
 ## Interne Version 2026111704
 
 - CatQuizLab-Integrationsjob und Eingabe `catquizlab_ref` aus `moodle-plugin-ci-dev.yml` entfernt (nicht beauftragt);
