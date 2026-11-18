@@ -139,6 +139,8 @@ jobs:
           - { php: '8.2', database: pgsql }
           - { php: '8.2', database: mariadb }
           - { php: '8.3', database: pgsql }
+          # CI-Nacharbeitsauftrag 17.11.2026: Moodle 4.5 mit PHP 8.2 und 8.3, jeweils MariaDB und PostgreSQL.
+          - { php: '8.3', database: mariadb }
 
     steps:
       - uses: actions/checkout@v4

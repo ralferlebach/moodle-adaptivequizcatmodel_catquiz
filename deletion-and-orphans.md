@@ -108,6 +108,14 @@ Aufbewahrungsgrund mehr.
   Versuch, Question Usage und Aktivität unverändert.
 - CatQuizLab (`engine_footprint_test`, `run_lifecycle_test`, `audit_test`, `experiment_stop_test`) mit diesem
   Adapter und Host: grün.
+- Nachtrag 17.11.2026 (CI-Nacharbeitsauftrag #11/#164):
+  - `attempt_deletion_chain_test::test_id_domains_and_attempt_states`: ID-Domänen gekreuzt, gleich, getrennt;
+    Zustände laufend, beendet, Löschung wiederholt, Host-Zeile vorher entfernt. Nichts von A über seine CAT-ID übrig;
+    B und C wertgleich über einen Fingerabdruck aller Felder (`assertSame`); keine neue Waise; B setzt fort.
+  - local_catquiz `tests/behat/catquiz_delete_activity_chain.feature`: Aktivität über die Kursseite löschen (mit
+    Papierkorb-Task) und Kurs über die Kursverwaltung löschen; jeweils mit gekreuzten Nummern, B setzt im Browser fort.
+  - Zahntest: Löscht der Adapter den Fortschritt zusätzlich über die Nummer des Versuchs der Aktivität, werden
+    `test_id_domains_and_attempt_states` (2 Fälle) rot.
 
 ## 6. Einspielen und Zuständigkeiten
 
@@ -118,7 +126,8 @@ Aufbewahrungsgrund mehr.
   - local_catquiz #95/#96 (Eigentum am Fortschritt) und #101 (Fortschritt über die CAT-Versuch-ID).
   - CatQuizLab: Deep Purge und Run-Reset prüfen ihre eigene Spur selbst (`engine_footprint`); der Adapter ändert
     dort nichts, es gibt keinen doppelten Fix.
-- Offen:
-  - Ein Browser-Test, der die Aktivität über die Oberfläche löscht.
-  - Die CI-Matrix auf GitHub (DoD4).
-  - Der reale Testlöschlauf auf CLARA mit Betreiberfreigabe (DoD5).
+- Zuständigkeiten (17.11.2026):
+  - Adapter: Löschung über die CAT-Versuch-ID (`attempt_cleanup`), Tests der ID-Domänen und Zustände.
+  - local_catquiz #96: Eigentum am Fortschritt (Person und CAT-Versuch); Behat-Kette über die Oberfläche.
+- Erledigt am 17.11.2026: Browser-Test über die Oberfläche, CI-Matrix (Workflow `moodle-plugin-ci-dev.yml`).
+- Offen: der reale Testlöschlauf auf CLARA mit Betreiberfreigabe (DoD5) – beim Betreiber.

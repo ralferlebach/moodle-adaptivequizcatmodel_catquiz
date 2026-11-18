@@ -73,8 +73,10 @@ final class attempt_deletion_chain_test extends advanced_testcase {
      * @param string $component How the CAT attempts name the activity (both spellings occur in production).
      * @param bool $instanceset Whether the CAT attempts name their activity - a running one does not yet, a finished
      *      one does; the old deletion of the activity found its rows by it.
+     * @param string $ids crossed (A's CAT id = B's activity attempt id and the other way round), same (A's CAT id =
+     *      A's own activity attempt id) or apart (no CAT id is an activity attempt id).
      */
-    private function build(string $component = 'mod_adaptivequiz', bool $instanceset = false): void {
+    private function build(string $component = 'mod_adaptivequiz', bool $instanceset = false, string $ids = 'crossed'): void {
         global $DB;
         $this->resetAfterTest();
         // The deletions are transactions under test: no test transaction around them (PostgreSQL).
@@ -118,7 +120,17 @@ final class attempt_deletion_chain_test extends advanced_testcase {
                 $DB->set_field('local_catquiz_attempts', 'instanceid', $this->act[$name][0]->id, ['id' => $this->cat($name)]);
             }
         }
-        $this->cross();
+        switch ($ids) {
+            case 'crossed':
+                $this->cross();
+                break;
+            case 'same':
+                $this->same_ids();
+                break;
+            case 'apart':
+                $this->ids_apart();
+                break;
+        }
 
         // C: another course, a finished attempt with CATquiz data and a grade.
         $this->act['C'] = $this->finished_activity_elsewhere();
@@ -211,6 +223,52 @@ final class attempt_deletion_chain_test extends advanced_testcase {
         $this->assertSame($hostb, $this->cat('A'), "A's CAT attempt has the number of B's activity attempt");
         $this->assertSame($hosta, $this->cat('B'), "B's CAT attempt has the number of A's activity attempt");
         \cache_helper::purge_all();
+    }
+
+    /**
+     * A's CAT attempt gets the number of A's own activity attempt (same number in both id spaces); B's is moved
+     * out of the way first if it holds that number.
+     */
+    private function same_ids(): void {
+        global $DB;
+        $hosta = $this->host('A');
+        $free = (int) $DB->get_field_sql('SELECT MAX(id) FROM {local_catquiz_attempts}') + 1000;
+        if ($this->cat('B') === $hosta) {
+            $this->renumber($hosta, $free + 1);
+        }
+        if ($this->cat('A') !== $hosta) {
+            $this->renumber($this->cat('A'), $hosta);
+        }
+        $this->assertSame($hosta, $this->cat('A'));
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * The CAT attempts of A and B get numbers that no activity attempt has.
+     */
+    private function ids_apart(): void {
+        global $DB;
+        $free = max(
+            (int) $DB->get_field_sql('SELECT MAX(id) FROM {local_catquiz_attempts}'),
+            (int) $DB->get_field_sql('SELECT MAX(id) FROM {adaptivequiz_attempt}')
+        ) + 5000;
+        $this->renumber($this->cat('A'), $free);
+        $this->renumber($this->cat('B'), $free + 1);
+        foreach (['A', 'B'] as $name) {
+            $this->assertFalse($DB->record_exists('adaptivequiz_attempt', ['id' => $this->cat($name)]));
+        }
+        \cache_helper::purge_all();
+    }
+
+    /**
+     * Everything of a snapshot as one string: every field of every row, so that equality means equal values, not
+     * only equal counts (re-audit 17.11.2026: "byte-/wertgleich").
+     *
+     * @param array $snapshot
+     * @return string
+     */
+    private static function fingerprint(array $snapshot): string {
+        return json_encode($snapshot, JSON_PRESERVE_ZERO_FRACTION);
     }
 
     /**
@@ -468,6 +526,80 @@ final class attempt_deletion_chain_test extends advanced_testcase {
         $this->assertEquals($b, $this->snapshot('B'), 'B unchanged');
         $this->assertEquals($c, $this->snapshot('C'), 'C unchanged');
         $this->assertEquals($orphans, $this->orphans(), 'No new orphan');
+        $this->assert_kept_rows();
+        $this->assert_b_goes_on($b);
+    }
+
+    /**
+     * The id domains and states of A (re-audit 17.11.2026, CI order for #11).
+     *
+     * @return array [ids, state]
+     */
+    public static function domains_and_states(): array {
+        return [
+            'same number in both id spaces, running' => ['same', 'running'],
+            'numbers apart, running' => ['apart', 'running'],
+            'crossed, finished with grade' => ['crossed', 'finished'],
+            'crossed, running, cleanup run again' => ['crossed', 'repeat'],
+            'crossed, the activity attempt already gone' => ['crossed', 'nohost'],
+        ];
+    }
+
+    /**
+     * Deleting activity A for every id domain and every state of A: A's data gone, B and C equal value by value,
+     * no new orphan, B goes on; a cleanup run again changes nothing.
+     *
+     * @param string $ids
+     * @param string $state
+     * @dataProvider domains_and_states
+     */
+    public function test_id_domains_and_attempt_states(string $ids, string $state): void {
+        global $DB;
+        // A CAT attempt without its activity attempt can only be found through the activity it names.
+        $this->build('mod_adaptivequiz', $state === 'nohost', $ids);
+        if ($state === 'finished') {
+            for ($i = 0; $i < 10 && !($this->play('A', [true])['stopped'] ?? false); $i++) {
+                continue;
+            }
+            $this->assertSame('complete', $DB->get_field('adaptivequiz_attempt', 'attemptstate', ['id' => $this->host('A')]));
+        }
+        $cata = $this->cat('A');
+        $hosta = $this->host('A');
+        $a = $this->snapshot('A');
+        if ($state === 'nohost') {
+            // A historical orphan: the CAT attempt of A without its activity attempt.
+            $DB->delete_records('adaptivequiz_attempt', ['id' => $hosta]);
+        }
+        $b = $this->snapshot('B');
+        $c = $this->snapshot('C');
+        $orphans = $this->orphans();
+        $this->assertNotEmpty($a['progress'], 'A has progress');
+        $this->assertNotEmpty($a['personparams'], 'A has person parameters');
+
+        $this->delete_a('activity');
+        if ($state === 'repeat') {
+            $fingerprints = [self::fingerprint($this->snapshot('B')), self::fingerprint($this->snapshot('C')), $this->counts()];
+            attempt_cleanup::delete_for_instance((int) $this->act['A'][0]->id);
+            attempt_cleanup::delete_for_host_attempts([$hosta]);
+            $this->assertSame($fingerprints, [self::fingerprint($this->snapshot('B')), self::fingerprint($this->snapshot('C')),
+                $this->counts()], 'a second cleanup changes nothing');
+        }
+
+        foreach (
+            ['local_catquiz_attempts' => 'id', 'local_catquiz_progress' => 'attemptid',
+                'local_catquiz_personparams' => 'attemptid'] as $table => $field
+        ) {
+            $this->assertSame(0, $DB->count_records($table, [$field => $cata]), "nothing of A left in $table");
+        }
+        $this->assertSame(self::fingerprint($b), self::fingerprint($this->snapshot('B')), 'B unchanged, value by value');
+        $this->assertSame(self::fingerprint($c), self::fingerprint($this->snapshot('C')), 'C unchanged, value by value');
+        $after = $this->orphans();
+        foreach ($after as $kind => $ids) {
+            $this->assertSame([], array_values(array_diff($ids, $orphans[$kind])), "no new orphan: $kind");
+        }
+        if ($state === 'nohost') {
+            $this->assertNotContains((string) $cata, $after['cat'], 'the historical orphan of A is gone with its activity');
+        }
         $this->assert_kept_rows();
         $this->assert_b_goes_on($b);
     }

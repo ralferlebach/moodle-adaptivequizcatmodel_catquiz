@@ -19,6 +19,7 @@ namespace adaptivequizcatmodel_catquiz;
 use adaptivequizcatmodel_catquiz\local\monitoring\request_simulator;
 use advanced_testcase;
 use completion_info;
+use local_catquiz\local\result\personparam_repository;
 use local_catquiz\local\status;
 use question_engine;
 
@@ -117,6 +118,13 @@ final class scale_set_complete_replay_test extends advanced_testcase {
         $course = $this->enable_completion($scenario);
         $this->setUser($scenario->userid);
 
+        // Engine #164: the intermediate estimates of the running attempt are marked provisional and bounded.
+        $this->assertTrue(
+            defined(personparam_repository::class . '::PROVISIONAL'),
+            'local_catquiz without the result contract of #164 - push local_catquiz first (doc/ergebnisvertrag-164.md).'
+        );
+        $selected = count($scales);
+        $maxrows = 0;
         $shown = request_simulator::request($scenario->adaptivequiz, $scenario->context, $scenario->userid, null);
         $answered = 0;
         while (!$shown['stopped'] && $answered < strlen($answers)) {
@@ -127,8 +135,15 @@ final class scale_set_complete_replay_test extends advanced_testcase {
                 $scenario->userid,
                 $answers[$answered - 1] === '1'
             );
+            if (!$shown['stopped']) {
+                $this->assert_running_estimates($scenario, $selected);
+                $maxrows = max($maxrows, $DB->count_records('local_catquiz_personparams', ['userid' => $scenario->userid]));
+            }
         }
         $this->assertTrue($shown['stopped'], 'The attempt ends.');
+        // Growth: while the attempt ran, at most one row per selected scale - not one per answer.
+        $this->assertGreaterThan(0, $maxrows, 'The running attempt has its estimates.');
+        $this->assertLessThanOrEqual($selected, $maxrows, 'One intermediate row per scale, updated in place.');
 
         // Engine and host: a regular end of its own, not an error and not an empty pool.
         $attempt = $DB->get_record('adaptivequiz_attempt', ['instance' => $scenario->adaptivequiz->id], '*', MUST_EXIST);
@@ -199,7 +214,119 @@ final class scale_set_complete_replay_test extends advanced_testcase {
         $data = (new completion_info($course))->get_data($cm, false, $scenario->userid);
         $this->assertSame(COMPLETION_COMPLETE, (int) $data->completionstate);
 
+        // Engine #164: after the finalisation no intermediate row is left; the results are final, with standard
+        // error, and they are the reference values of the person (carry-over and peers).
+        $rows = $DB->get_records('local_catquiz_personparams', ['userid' => $scenario->userid], 'id');
+        $this->assertNotEmpty($rows);
+        foreach ($rows as $row) {
+            $this->assertNotSame(personparam_repository::PROVISIONAL, (string) $row->validationstatus, 'No provisional row left.');
+            $this->assertSame((int) $catattempt->id, (int) $row->attemptid, 'Every row belongs to the CAT attempt.');
+            $this->assertSame('current', (string) $row->resultsource);
+            $this->assertNotNull($row->standarderror, 'A final result has its standard error.');
+            $this->assertTrue(personparam_repository::is_reference($row));
+        }
+        $this->assertCount(count(array_unique(array_map(fn($r) => (int) $r->catscaleid, $rows))), $rows, 'One row per scale.');
+
+        // Reconciliation: finalising again changes nothing - no second result, grade or completion.
+        $fingerprint = json_encode($rows, JSON_PRESERVE_ZERO_FRACTION);
+        \local_catquiz\local\attempt\attempt_finalizer::finalize((int) $attempt->id, (int) $attempt->timefinished);
+        $this->assertSame(
+            $fingerprint,
+            json_encode(
+                $DB->get_records('local_catquiz_personparams', ['userid' => $scenario->userid], 'id'),
+                JSON_PRESERVE_ZERO_FRACTION
+            ),
+            'A second finalisation leaves the results as they are.'
+        );
+        $this->assertCount(1, $DB->get_records('grade_grades', ['itemid' => $item->id, 'userid' => $scenario->userid]));
+        $this->assertSame(1, $DB->count_records('logstore_standard_log', [
+            'eventname' => '\mod_adaptivequiz\event\attempt_completed', 'objectid' => $attempt->id,
+        ]), 'Still completed once.');
+
         $this->resetDebugging();
+    }
+
+    /**
+     * Engine #164, end by the time limit after two answers: the task closes the attempt, the finaliser runs, no
+     * intermediate row is left, the result is invalid (too few items) and gives neither a start value nor a peer.
+     */
+    public function test_an_attempt_closed_by_the_time_limit_keeps_no_intermediate_row(): void {
+        global $DB;
+        $this->resetAfterTest();
+        $this->setAdminUser();
+        $this->preventResetByRollback();
+        $scales = ['Simulation', 'SimB', 'SimB01', 'SimB02', 'SimB03', 'SimB04'];
+        $scenario = trace_scenario::create($this->getDataGenerator(), true, [
+            'cateststrategyid' => LOCAL_CATQUIZ_STRATEGY_LOWESTSUB,
+            'catquiz_minquestions' => 12,
+            'catquiz_maxquestions' => 25,
+            'catquiz_minquestionspersubscale' => 3,
+            'catquiz_maxquestionspersubscale' => 5,
+            'catquiz_standarderror_min' => 0.0001,
+            'catquiz_standarderror_max' => 1.0,
+            'catquiz_includetimelimit' => 0,
+        ], 25);
+        $this->select_scales($scenario, $scales);
+        $DB->set_field('adaptivequiz', 'minimumquestions', 0, ['id' => $scenario->adaptivequiz->id]);
+        $this->setUser($scenario->userid);
+        request_simulator::request($scenario->adaptivequiz, $scenario->context, $scenario->userid, null);
+        request_simulator::request($scenario->adaptivequiz, $scenario->context, $scenario->userid, true);
+        request_simulator::request($scenario->adaptivequiz, $scenario->context, $scenario->userid, false);
+        $this->assert_running_estimates($scenario, count($scales));
+        $this->setAdminUser();
+
+        // Two days old: beyond the default limit of a day.
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['instance' => $scenario->adaptivequiz->id], '*', MUST_EXIST);
+        $DB->set_field('adaptivequiz_attempt', 'timecreated', time() - 2 * DAYSECS, ['id' => $attempt->id]);
+        set_config('maximum_attempt_duration_hours', 24, 'local_catquiz');
+        ob_start();
+        (new \local_catquiz\task\cancel_expired_attempts())->execute();
+        ob_end_clean();
+
+        $attempt = $DB->get_record('adaptivequiz_attempt', ['id' => $attempt->id], '*', MUST_EXIST);
+        $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attempt->id], '*', MUST_EXIST);
+        $this->assertSame('complete', $attempt->attemptstate);
+        $this->assertNotEmpty($catattempt->endtime, 'The finaliser ran.');
+        $rows = $DB->get_records('local_catquiz_personparams', ['userid' => $scenario->userid], 'id');
+        foreach ($rows as $row) {
+            $this->assertNotSame(personparam_repository::PROVISIONAL, (string) $row->validationstatus, 'No provisional row left.');
+            $this->assertNotSame('prior', (string) $row->resultsource, 'No start value of the default is carried.');
+            $this->assertNotNull($row->standarderror, 'A final result has its standard error.');
+        }
+        $this->assertLessThanOrEqual(count($scales), count($rows));
+        $root = (int) $DB->get_field('local_catquiz_catscales', 'id', ['name' => 'Simulation']);
+        $contextid = (int) $catattempt->contextid;
+        $this->assertNull(
+            personparam_repository::get_latest_valid($scenario->userid, $contextid, $root),
+            'Two answers are no admissible value: no start value of the next attempt.'
+        );
+        [$sql, $params] = \local_catquiz\local\statistics\peer_population::sql($contextid, $root);
+        $this->assertFalse(
+            $DB->record_exists_sql("SELECT 1 FROM ($sql) x WHERE x.userid = :who", $params + ['who' => $scenario->userid]),
+            'And no peer.'
+        );
+        $this->resetDebugging();
+    }
+
+    /**
+     * The estimates of a running attempt (engine #164): provisional, of its own CAT attempt, at most one per scale,
+     * none of them a reference value.
+     *
+     * @param trace_scenario $scenario
+     * @param int $selected The number of selected scales.
+     */
+    private function assert_running_estimates(trace_scenario $scenario, int $selected): void {
+        global $DB;
+        $host = (int) $DB->get_field('adaptivequiz_attempt', 'MAX(id)', ['instance' => $scenario->adaptivequiz->id]);
+        $catid = (int) $DB->get_field('local_catquiz_attempts', 'id', ['attemptid' => $host]);
+        $rows = $DB->get_records('local_catquiz_personparams', ['userid' => $scenario->userid]);
+        $this->assertLessThanOrEqual($selected, count($rows));
+        foreach ($rows as $row) {
+            $this->assertSame(personparam_repository::PROVISIONAL, (string) $row->validationstatus, 'Marked provisional.');
+            $this->assertSame($catid, (int) $row->attemptid, 'Of the running CAT attempt.');
+            $this->assertSame(0, (int) $row->isvalid);
+            $this->assertFalse(personparam_repository::is_reference($row), 'Not a reference value.');
+        }
     }
 
     /**

@@ -1,5 +1,26 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111704
+
+- CatQuizLab-Integrationsjob und Eingabe `catquizlab_ref` aus `moodle-plugin-ci-dev.yml` entfernt (nicht beauftragt);
+  Verweise in `deletion-and-orphans.md` entsprechend gekürzt. Sonst wie 2026111703.
+
+## Interne Version 2026111703
+
+CI-Nacharbeitsauftrag #11/#164 vom 17.11.2026. Abhängigkeit unverändert: mod_adaptivequiz ab 2026111700. Die Tests setzen
+local_catquiz mit dem Ergebnisvertrag #164 voraus (1.3: 2026111704, 1.2: 2026111703) und schlagen ohne ihn mit
+Hinweis fehl – local_catquiz zuerst pushen.
+
+- `tests/local/attempt_deletion_chain_test.php`: neuer Fall `test_id_domains_and_attempt_states` – ID-Domänen gekreuzt,
+  gleich, getrennt; Zustände laufend, beendet, Wiederholung der Löschung, Host-Zeile vorher entfernt. Nichts von A über
+  die CAT-ID übrig, B und C wertgleich (Fingerabdruck aller Felder), keine neuen Orphans, B setzt fort.
+- `tests/scale_set_complete_replay_test.php` (#164): je Antwort höchstens eine Zwischenschätzung je Skala, als
+  `provisional` des eigenen CAT-Versuchs und kein Referenzwert; nach dem Ende keine Zwischenschätzung, Ergebnisse mit
+  SE, kein Default-`prior`; zweite Finalisierung ändert nichts (Ergebnisse, Note, Abschluss-Ereignis). Neuer Fall
+  Timeout nach zwei Antworten über den Task `cancel_expired_attempts`: ungültiges Ende, keine Zwischenwerte, kein
+  Startwert, kein Peer.
+- CI: PHPUnit-Matrix um PHP 8.3/MariaDB ergänzt.
+
 ## Interne Version 2026111702
 
 Re-Audit vom 17.11.2026 (local_catquiz #172 DoD1/DoD3, Adapter #12, Host #23). Abhängigkeit unverändert: mod_adaptivequiz
