@@ -279,3 +279,13 @@ function adaptivequizcatmodel_catquiz_completed_attempt_review_allowed(stdClass 
     }
     return \local_catquiz\local\access\question_review::released_to_owner((int) $adaptivequiz->id);
 }
+
+/**
+ * Whether the host measures its request steps (mod_adaptivequiz #17): when the trace of CATquiz is on, which
+ * stores the host's spans next to its own. Off, the host measures nothing - the production default.
+ *
+ * @return bool
+ */
+function adaptivequizcatmodel_catquiz_wants_request_timing(): bool {
+    return \local_catquiz\local\monitoring\timeline::enabled();
+}
