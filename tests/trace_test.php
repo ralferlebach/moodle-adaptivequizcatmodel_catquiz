@@ -279,4 +279,29 @@ final class trace_test extends advanced_testcase {
             $inner['name'] . ' ends in ' . $outer['name']
         );
     }
+
+    /**
+     * The host measures its steps only while the trace of CATquiz is on - the production default is off
+     * (mod_adaptivequiz #17); on, its spans are there to be stored with CATquiz's.
+     */
+    public function test_the_host_measures_only_with_the_trace(): void {
+        $this->resetAfterTest();
+        $host = trace_scenario::HOST_TIMING;
+        $this->assertTrue(method_exists($host, 'enabled'), 'mod_adaptivequiz without the switch of #17 - pin the host.');
+
+        set_config(timeline::CONFIG, 0, 'local_catquiz');
+        timeline::reset();
+        $host::reset_request();
+        $this->assertFalse($host::enabled());
+        $host::measure('select_item', fn() => null);
+        $this->assertSame([], $host::get_spans());
+
+        set_config(timeline::CONFIG, 1, 'local_catquiz');
+        timeline::reset();
+        $host::reset_request();
+        $this->assertTrue($host::enabled());
+        $host::measure('select_item', fn() => null);
+        $this->assertSame(['select_item'], array_column($host::get_spans(), 'name'));
+        $host::reset_request();
+    }
 }

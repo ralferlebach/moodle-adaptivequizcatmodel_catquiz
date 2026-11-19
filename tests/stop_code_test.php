@@ -94,4 +94,42 @@ final class stop_code_test extends advanced_testcase {
             );
         }
     }
+
+    /**
+     * The status numbers CATquiz stored over time (local_catquiz_attempts.status), read back: every number of the
+     * mapping, -1 of attempts before #64 (an error was stored as "undefined") and a number no version wrote. A regular
+     * end - maximum, precision, every scale done - comes only from its own status; -1 and an unknown number never read
+     * as one, nor as an empty pool: neutral, no claim (adapter #12 AK3, AK7).
+     */
+    public function test_stored_status_numbers_of_every_version(): void {
+        $mapping = (new \ReflectionClass(status::class))->getProperty('mapping');
+        $mapping->setAccessible(true);
+        $byint = array_flip($mapping->getValue());
+        $this->assertCount(15, $mapping->getValue());
+        $this->assertEqualsCanonicalizing(range(-1, 13), array_keys($byint), 'The numbers -1 to 13, none reused.');
+
+        $regular = [stop_reason::MAXIMUM, stop_reason::TARGET_PRECISION, stop_reason::SCALES_COMPLETE];
+        $regularstatuses = [status::ERROR_REACHED_MAXIMUM_QUESTIONS, status::STOP_TARGET_PRECISION,
+            status::ABORT_PERSONABILITY_NOT_CHANGED, status::STOP_SCALES_COMPLETE];
+        foreach ([...array_keys($byint), 99, -7] as $number) {
+            $name = $byint[$number] ?? null;
+            $code = $name === null ? null : stop_code::from_status($name);
+            if (in_array($code, $regular, true)) {
+                $this->assertContains($name, $regularstatuses, "Status $number reads as a regular end.");
+            }
+            if ($name === null || $name === status::STATUS_UNDEFINED || $name === status::OK) {
+                // Unknown, undefined (an error before #64) or still running: no regular end, no empty pool, no error
+                // claimed either - the host shows a neutral notice or none.
+                $claims = [...$regular, stop_reason::NO_ELIGIBLE, stop_reason::NO_ELIGIBLE_BEFORE_MINIMUM];
+                $this->assertNotContains($code, $claims, "Status $number");
+                $this->assertNotSame(stop_reason::NOTICE_NONE, stop_reason::notice_kind($code ?? 'unknown'), "Status $number");
+            }
+        }
+        // The errors stay errors, whatever their number.
+        $errors = [status::ERROR_GENERAL, status::ERROR_FETCH_NEXT_QUESTION, status::ERROR_TESTITEM_ALREADY_IN_RELATED_SCALE];
+        foreach ($errors as $name) {
+            $this->assertSame(stop_reason::ERROR, stop_code::from_status($name), $name);
+            $this->assertSame(stop_reason::NOTICE_ERROR, stop_reason::notice_kind(stop_code::from_status($name)));
+        }
+    }
 }

@@ -121,6 +121,11 @@ final class request_simulator {
                 throw new \coding_exception('Another request holds the lock of this attempt.');
             }
             $stopped = $evaluation->item_administration_is_to_stop();
+            if ($stopped && $uniqueid === 0 && !empty($adaptivequiz->catmodel) && (string) $evaluation->stoppage_reason() !== '') {
+                // As attempt.php: a CAT model that cannot start the attempt says why, and the empty attempt is left as it
+                // is (the legacy host throws the same exception from cat_session).
+                throw new \mod_adaptivequiz\local\catmodel\catmodel_session_exception((string) $evaluation->stoppage_reason());
+            }
             if ($stopped) {
                 adaptivequiz_complete_attempt(
                     $uniqueid,

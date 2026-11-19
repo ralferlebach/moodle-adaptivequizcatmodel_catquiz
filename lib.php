@@ -276,3 +276,13 @@ function adaptivequizcatmodel_catquiz_completed_attempt_review_allowed(stdClass 
 function adaptivequizcatmodel_catquiz_post_delete_attempt_callback(stdClass $adaptivequiz, stdClass $attempt): void {
     \adaptivequizcatmodel_catquiz\local\attempt_cleanup::delete_for_host_attempts([(int) $attempt->id]);
 }
+
+/**
+ * Whether the host measures its request steps (mod_adaptivequiz #17): when the trace of CATquiz is on, which
+ * stores the host's spans next to its own. Off, the host measures nothing - the production default.
+ *
+ * @return bool
+ */
+function adaptivequizcatmodel_catquiz_wants_request_timing(): bool {
+    return \local_catquiz\local\monitoring\timeline::enabled();
+}

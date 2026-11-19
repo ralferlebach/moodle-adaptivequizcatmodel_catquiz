@@ -1,5 +1,27 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111706
+
+Re-Audit 18.11.2026, Restarbeiten 19.11.2026. Setzt mod_adaptivequiz 2026111701 voraus (Schalter der Request-Messung);
+local_catquiz 1.2 2026111706 pinnt dieses Tripel.
+
+- Host #17: `adaptivequizcatmodel_catquiz_wants_request_timing()` – der Host misst nur, wenn der CATquiz-Trace an ist
+  (Produktionsstandard aus). Test `trace_test::test_the_host_measures_only_with_the_trace`.
+- Host #25: `tests/link_functions_calibrated_test.php` – alle sechs Linkfunktionen auf dem eingefrorenen Ergebnis eines
+  echten Versuchs (LOWESTSUB-Replay, kalibrierte Simulationsbatterie), je beiderseits der Bestehensgrenze, gegen
+  unabhängige geschlossene Formen (Fisher-Rao: Simpson über die aktuelle Testinformation); Gradebook, Wert für LTI AGS
+  (`grade_get_grades()`), Snapshot, Abschluss. Dazu „keine Bewertung“ (GRADE_TYPE_NONE: keine Note, nicht 0; Messung
+  gültig; Abschluss erfüllt), „nicht neu bewerten“ (keine Aufgabe, Note und Snapshot unverändert) und das Gegenstück,
+  Sicherung mit Nutzerdaten und Wiederherstellung (Einstellungen, Snapshot, Note).
+- Adapter #12: `stop_code_test::test_stored_status_numbers_of_every_version` (Statusnummern −1 bis 13, unbekannte);
+  `tests/stop_matrix_test.php` – RELSUBS, LOWESTSUB, FASTEST, ALLSUBS, CLASSIC × reguläres Ende, nicht erreichbares
+  Minimum (Abweisung vor dem Start mit Begründung, wie `attempt.php`), technischer Fehler, echte Versuche.
+  `request_simulator` (v-3.0) wirft bei einer Abweisung vor der ersten Frage wie `attempt.php` statt den leeren
+  Versuch abzuschließen. `stop-contract.md` §4/§5 ergänzt.
+- local_catquiz #146 DoD3: `tests/two_attempts_one_session_test.php` – Versuch A läuft, B startet in derselben Sitzung
+  auf demselben Pool, A wird fortgesetzt: keine Frage doppelt, keine Antwort verloren, Progress = Usage, A durch B
+  unverändert.
+
 ## Interne Version 2026111705
 
 Re-Audit Restarbeiten 18.11.2026. Setzt local_catquiz mit #174 voraus (1.3: 2026111706, 1.2: 2026111705).

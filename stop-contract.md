@@ -59,7 +59,22 @@ Ursache und Gültigkeit sind getrennt modelliert:
   - jede Zeile der Tabelle;
   - leerer, fehlender und unbekannter Status;
   - jeder Status von `local_catquiz\local\status` ist einem Host-Code zugeordnet.
-- Host `tests/local/attempt/stop_notice_test.php`: Hinweisart und Text je Code.
+  - neu (19.11.2026) `test_stored_status_numbers_of_every_version`: jede gespeicherte Statusnummer −1 bis 13,
+    eine nie geschriebene (99, −7): ein reguläres Ende nur aus seinem eigenen Status; −1 (vor #64 so gespeicherte
+    Fehler), 0 und unbekannte Nummern weder als reguläres Ende noch als leerer Pool – neutraler Hinweis; die drei
+    Fehlerstatus immer `error` mit Fehlerhinweis.
+- `tests/stop_matrix_test.php` (neu 19.11.2026): echte Versuche über Host, Adapter, Engine und Question Usage für
+  RELSUBS, LOWESTSUB, FASTEST, ALLSUBS und CLASSIC, je reguläres Ende, nicht erreichbares Minimum und technischer
+  Fehler (15 Fälle). Je Fall: Host-Code = Übersetzung des Engine-Status; Fehler bleibt `error`; `resultvalid` =
+  statistische Gültigkeit der Globalskalen-Zeile (`global_scale_validity` – die der Note, nicht die des Berichts);
+  Note und Abschluss genau bei gültigem Ergebnis; ein Abschluss-Ereignis; zweite Finalisierung ändert nichts. Ein
+  Test, dessen Minimum Pool und Teilskalen-Grenzen nicht hergeben, wird vor dem Start mit Begründung abgewiesen – wie
+  `attempt.php` beider Linien: keine Frage, kein CAT-Versuch, der leere Versuch bleibt stehen, keine Note, kein
+  Abschluss (der `request_simulator` der v-3.0-Linie bildet das jetzt nach). Das Ende eines laufenden Versuchs vor dem
+  Minimum belegen local_catquiz `end_without_question_test` und `stop_code_test`.
+- Host `tests/local/attempt/stop_notice_test.php`: Hinweisart und Text je Code; Host-Behat
+  `result_after_technical_error.feature` (neu 19.11.2026): Fehlerdialog auf der echten Ergebnisseite, gültige Messung
+  mit Note und Abschluss, fehlende Schätzung ohne Note (nicht 0) und ohne Abschluss, reguläres Ende gleich bewertet.
 - local_catquiz `tests/teststrategy/strategy_semantics_test.php` und `end_without_question_test.php` (#172): welcher
   Status wann entsteht.
 
@@ -68,3 +83,5 @@ Ursache und Gültigkeit sind getrennt modelliert:
 - Ein Host vor 2026111701 (v-3.0) bzw. 2026111700 (Legacy) kennt `scalescomplete` und `noeligiblebeforeminimum`
   nicht und zeigt dafür den neutralen Hinweis.
 - Der Adapter verlangt die neuen Host-Versionen.
+- Historische Versuche (Status −1, Stoppcode leer vor Host #20) werden nicht umgeschrieben und nicht neu bewertet; sie
+  werden nur gelesen (neutraler bzw. kein Hinweis).
