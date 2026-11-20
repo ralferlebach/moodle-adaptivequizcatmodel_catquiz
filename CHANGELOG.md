@@ -1,5 +1,32 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111708
+
+Re-Audit 19.11.2026, Issues, CI und Lasttests. Setzt weiter mod_adaptivequiz 2026111703 voraus; läuft mit local_catquiz
+1.3 2026111708 (Nachweise dort in `doc/re-audit-2026-11-19-nachweise.md`).
+
+- **Longrun (P0, Host #17, local_catquiz #161/#168):** `tests/longrun_test.php` neu aufgebaut. Ein Versuch mit 150–250
+  Fragen (`CATQUIZ_LONGRUN_ITEMS`, CI 250) aus einem gemischten Pool (Einfachauswahl, Wahr/Falsch, numerisch,
+  Kurzantwort; `trace_scenario::add_other_question_types()`), mit dem ganzen Feedback-Pfad
+  (`CATQUIZ_LONGRUN_FEEDBACK=1`, 512 MiB): je Request Trace, Request-ID und Spans; Speicher (PHP-Peak je Request,
+  Prozess-Peak), gespeicherte Bytes von Feedback- und Progress-JSON; Synchronität Progress/Question Usage; ein
+  Request, der nach der Antwort abbricht, und sein Wiederholen (Replay nach Serverabbruch: die Antwort zählt einmal,
+  die nächste Frage kommt einmal); idempotente Finalisierung (eine zweite ändert nichts). Zweiter Test: zwölf Personen
+  gleichzeitig in eigenen Prozessen (`CATQUIZ_LONGRUN_PARALLEL`, `CATQUIZ_LONGRUN_PARALLEL_ITEMS`, CI 12 × 150) – keine
+  Fremdzuordnung, keine doppelte Frage, je Versuch eine Finalisierung. Workflow: Dispatch `longrun=true` → eigener
+  Schritt in einer PostgreSQL-Zelle mit GNU time (RSS), JUnit, Zusammenfassung und Artefakt; läuft er nicht oder wird
+  er übersprungen, ist der Schritt rot.
+- `local\monitoring\request_simulator`: `play()` mit Optionen (`dieat`: Request bricht nach der Antwort ab; `retry`);
+  `answer()` beantwortet jeden Fragetyp des Pools (richtig/falsch) statt nur Wahr/Falsch.
+- **CI-Nachweis (P0):** `.github/scripts/ci_evidence.py` und `.github/ci-required-tests.txt` (7 Tests: `stop_matrix`,
+  `stop_code`, `two_attempts_one_session`, `link_functions_calibrated`, `result_provider_information`,
+  `scale_set_complete_replay`, `trace`). Jede PHPUnit-Zelle schreibt die eingebauten Commits und Versionen von Host,
+  Adapter und Engine, Moodle, PHP und Datenbank in die Zusammenfassung des Laufs und ist rot, wenn einer dieser Tests
+  nicht lief, scheiterte oder übersprungen wurde.
+- `stop-contract.md` §3: Host #23 fachlich freigegeben (19.11.2026) – gültige Messung nach dem Minimum zählt trotz
+  technischem Ende, Stoppcode bleibt `error`.
+- Offen: STACK-Fragen im Longrun (auf den Runnern ist kein Maxima installiert); siehe Nachweisdokument §5.
+
 ## Interne Version 2026111707
 
 Re-Audit 18.11.2026, Restarbeiten 19.11.2026. Setzt mod_adaptivequiz 2026111703 voraus (Schalter der Request-Messung);

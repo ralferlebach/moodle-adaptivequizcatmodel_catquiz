@@ -35,7 +35,7 @@ Stand 17.11.2026. Gilt für beide Linien. Eine Stelle übersetzt: `classes/local
 | `statusundefined` | -1 | – | – | Historisch, z. B. der Fallback vor 2026100922. Wird nicht übersetzt; der gespeicherte Host-Code bleibt |
 | unbekannt | – | eigener Name | neutral | Ein neuerer CATquiz-Status, den dieser Adapter noch nicht kennt |
 
-## 3. Technischer Fehler und Gültigkeit (Host #23, Stand 18.11.2026)
+## 3. Technischer Fehler und Gültigkeit (Host #23, Stand 18.11.2026, freigegeben 19.11.2026)
 
 Ursache und Gültigkeit sind getrennt modelliert:
 
@@ -51,7 +51,10 @@ Ursache und Gültigkeit sind getrennt modelliert:
 - Beleg: `tests/scale_set_complete_replay_test.php::test_a_technical_error_ends_the_attempt_once` (echter Fehler: die
   Itemparameter verschwinden unter dem laufenden Versuch, die Engine endet mit `error`), beide Fälle vor/nach dem
   Minimum; der Fall „nach dem Minimum“ ergibt im Replay eine gültige Messung mit Note und Abschluss.
-- Die fachliche Freigabe dieser Regel (gültige Messung trotz technischem Ende zählt) liegt beim Projektverantwortlichen.
+- **Fachlich freigegeben am 19.11.2026** (Projektverantwortlicher, Rückmeldung zum Re-Audit vom 19.11.2026: „Zählt, wie
+  umgesetzt“): Eine gültige Messung nach dem Minimum ergibt trotz technischem Ende Note und Abschluss; der Stoppcode
+  bleibt `error`. Im Browser belegt: local_catquiz `tests/playwright/tests/cat-attempt-path.spec.ts` („a technical
+  error before/after the minimum“ – Dialog mit Fokus, axe ohne Verstoß, Note/Abschluss wie die Gültigkeit).
 
 ## 4. Nachweise
 
