@@ -82,3 +82,28 @@ Prozess-Speicherwerte enthalten, was PHPUnit und Moodle-Caches im Prozess behalt
 - Der Test prüft aggregiert mit weitem Rand, nicht punktgenau: kein Fehler, kein Fatal,
   kein offener Span, jede Anfrage mit eigener ID, Prozessspeicher < 128 KB/Item, Spitze
   < 512 KB/Item.
+
+## Re-Audit 19.11.2026: 250 Items und 12 × 150 gleichzeitig (gemessen 20.11.2026)
+
+Aufruf wie im Dispatch `longrun=true` des Workflows:
+
+    CATQUIZ_LONGRUN=1 CATQUIZ_LONGRUN_FEEDBACK=1 CATQUIZ_LONGRUN_ITEMS=250 CATQUIZ_LONGRUN_PARALLEL=12 \
+        CATQUIZ_LONGRUN_PARALLEL_ITEMS=150 CATQUIZ_LONGRUN_OUT=/tmp/longrun.json \
+        /usr/bin/time -v vendor/bin/phpunit --group longrun <Pfad>/tests/longrun_test.php
+
+Pool: Simulationspool plus Zwillinge jeder zweiten Frage als Wahr/Falsch, numerisch und Kurzantwort (gleiche
+Itemparameter); ganzer Feedback-Pfad. Ein Request bricht nach dem Speichern der Antwort ab, die Wiederholung zeigt
+die nächste Frage genau einmal. Beide Linien „OK (2 tests, 169 assertions)“:
+
+| | 3.0 (Moodle 5.1.9, PHP 8.3.6, PostgreSQL 16) | Legacy (Moodle 4.5.16, PHP 8.3.6, PostgreSQL 16) |
+|---|---:|---:|
+| Requests / Items / verschiedene Fragen | 252 / 250 / 250 | 252 / 250 / 250 |
+| Typen Einfachauswahl / Wahr-Falsch / numerisch / Kurzantwort | 167 / 27 / 30 / 26 | 167 / 27 / 30 / 26 |
+| Fehler / Fatals / Request-IDs verschieden | 0 / 0 / 251 | 0 / 0 / 251 |
+| Request p50 / p95 / max (ms) | 198 / 398 / 793 | 191 / 393 / 590 |
+| Prozess-Peak PHP / RSS | 127 MB / 168 MB | 123 MB / 164 MB |
+| Feedback-JSON / Progress-JSON (Bytes) | 110.672 / 416.861 | 110.673 / 416.861 |
+| 12 × 150 gleichzeitig: Dauer, Request p95 max, Prozess-Peak max | 166 s, 1.681 ms, 131 MB | 203 s, 2.191 ms, 127 MB |
+
+Je Person ihr Versuch und CAT-Versuch, keine Frage doppelt, je eine Finalisierung. Einordnung und HTTP-Messung (Session):
+local_catquiz `doc/re-audit-2026-11-19-nachweise.md` §5/§6.

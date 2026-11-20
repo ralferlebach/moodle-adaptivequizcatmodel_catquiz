@@ -70,6 +70,8 @@ final class request_simulator {
      * @param int $userid The person; must be the current user.
      * @param bool|null $right How the pending item is answered; null when there is none to answer.
      * @param bool $timequba Also time loading the question usage once before the request (not part of the trace).
+     * @param bool $dieafteranswer The request ends after the answer is processed and saved - a server that went away
+     *      (OOM, timeout, killed worker) before the next question was chosen. Re-audit 19.11.2026, long run.
      * @return array questionid (null when the attempt ended), stopped, attemptid, slots, requestms, qubaloadms
      */
     public static function request(
@@ -77,7 +79,8 @@ final class request_simulator {
         context_module $context,
         int $userid,
         ?bool $right,
-        bool $timequba = false
+        bool $timequba = false,
+        bool $dieafteranswer = false
     ): array {
         global $CFG, $DB;
         require_once($CFG->dirroot . '/mod/adaptivequiz/locallib.php');
@@ -107,6 +110,18 @@ final class request_simulator {
                 $attempt,
                 $helper
             ));
+        }
+        if ($dieafteranswer) {
+            // Nothing after this point ran: no item chosen, no attempt completed - and no lock left behind (a dead
+            // process releases its locks; the lock factory of the test does the same at the end of the call).
+            return [
+                'questionid' => null, 'stopped' => false, 'died' => true,
+                'attemptid' => (int) $DB->get_field_sql(
+                    'SELECT MAX(id) FROM {adaptivequiz_attempt} WHERE instance = ? AND userid = ?',
+                    [$adaptivequiz->id, $userid]
+                ),
+                'slots' => 0, 'requestms' => round((hrtime(true) - $start) / 1e6, 3), 'qubaloadms' => $qubaloadms,
+            ];
         }
 
         if (method_exists(cat_session::class, 'administer_next_item')) {
@@ -175,17 +190,31 @@ final class request_simulator {
      * @param int $userid The person; must be the current user.
      * @param int $items Items to administer at most; one more request answers the last of them.
      * @param callable $answer fn(int $n): bool, whether the n-th item (1 for the first) is answered right.
+     * @param array $options 'dieat' => n: the request that answers item n dies after saving the answer, and the
+     *      next request - the browser's retry or reload - sends no answer (re-audit 19.11.2026, long run).
      * @return array One entry per request: item, requestms, qubaloadms, memoryendkb, memorypeakkb, attemptid,
-     *      stopped, traced, traceid, kind, requestid, spans, error (the class of an exception, never its message).
+     *      stopped, died, traced, traceid, kind, requestid, spans, error (the class of an exception,
+     *      never its message).
      */
-    public static function play(stdClass $adaptivequiz, context_module $context, int $userid, int $items, callable $answer): array {
+    public static function play(
+        stdClass $adaptivequiz,
+        context_module $context,
+        int $userid,
+        int $items,
+        callable $answer,
+        array $options = []
+    ): array {
         global $DB;
         $timeline = self::TIMELINE;
         $requests = [];
+        $dieat = $options['dieat'] ?? null;
+        $retry = false;
         for ($n = 0; $n <= $items; $n++) {
             $entry = ['item' => $n, 'error' => null, 'traced' => false, 'spans' => []];
+            $dies = $dieat !== null && $n === $dieat && !$retry;
             try {
-                $result = self::request($adaptivequiz, $context, $userid, $n === 0 ? null : (bool) $answer($n), true);
+                $right = ($n === 0 || $retry) ? null : (bool) $answer($n);
+                $result = self::request($adaptivequiz, $context, $userid, $right, true, $dies);
             } catch (\Throwable $e) {
                 $entry['error'] = get_class($e);
                 $entry['errorwhere'] = basename($e->getFile()) . ':' . $e->getLine();
@@ -195,7 +224,7 @@ final class request_simulator {
             // Measured before the trace is written: writing it costs memory of its own.
             $entry['memoryendkb'] = round(memory_get_usage() / 1024, 1);
             $entry['memorypeakkb'] = round(memory_get_peak_usage(true) / 1024, 1);
-            $entry['item'] = $result['stopped'] ? $n : $n + 1;
+            $entry['item'] = ($result['stopped'] || $dies) ? $n : $n + 1;
             $entry += $result;
             $traceid = class_exists($timeline) ? $timeline::flush() : null;
             if ($traceid !== null) {
@@ -214,6 +243,13 @@ final class request_simulator {
             if ($result['stopped']) {
                 break;
             }
+            if ($dies) {
+                // The retry follows: the same item number, without an answer.
+                $retry = true;
+                $n--;
+                continue;
+            }
+            $retry = false;
         }
         return $requests;
     }
@@ -226,8 +262,19 @@ final class request_simulator {
      * @param bool $right
      */
     public static function answer(question_usage_by_activity $quba, int $slot, bool $right): void {
-        $correct = $quba->get_correct_response($slot)['answer'] ?? 0;
-        $quba->process_action($slot, ['answer' => $right ? $correct : ($correct >= 1 ? $correct - 1 : $correct + 1)]);
+        $response = $quba->get_correct_response($slot) ?? [];
+        if (!$right) {
+            $type = $quba->get_question($slot)->get_type_name();
+            $correct = $response['answer'] ?? 0;
+            $response['answer'] = match ($type) {
+                // Re-audit 19.11.2026: the long run plays other question types besides the single choice.
+                'truefalse' => (int) !$correct,
+                'numerical' => (string) ((float) $correct + 1000),
+                'shortanswer' => 'not ' . $correct,
+                default => $correct >= 1 ? $correct - 1 : $correct + 1,
+            };
+        }
+        $quba->process_action($slot, $response);
         $quba->finish_all_questions(time());
     }
 

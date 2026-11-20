@@ -1,0 +1,9 @@
+# Tests the issues of adaptivequizcatmodel_catquiz name (re-audit 19.11.2026, CI matrix P0) - the integration of
+# host, adapter and engine. Each must run, pass and not be skipped in every PHPUnit cell (ci_evidence.py).
+stop_matrix_test                     # #12, host #23, engine #172
+stop_code_test                       # #12
+two_attempts_one_session_test        # engine #146 DoD3
+link_functions_calibrated_test       # host #25
+result_provider_information_test     # host #25
+scale_set_complete_replay_test       # engine #172, #174, host #23
+trace_test                           # host #17

@@ -28,7 +28,7 @@ on:
         required: false
         default: ''
       longrun:
-        description: 'Heavy: the 160-item long run with the whole feedback path, 512 MiB (adapter #6)'
+        description: 'Heavy: the long run - 250 items and 12 people x 150 items at once, with the feedback (adapter #6, re-audit 19.11.2026)'
         required: false
         default: 'false'
   push:
@@ -153,6 +153,8 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
+          # pcntl: the long run forks the processes of twelve people (re-audit 19.11.2026).
+          extensions: pcntl
           ini-values: max_input_vars=5000
           coverage: none
 
@@ -209,22 +211,87 @@ jobs:
 
       - name: PHPUnit tests
         if: ${{ always() }}
-        run: set -o pipefail; moodle-plugin-ci phpunit --fail-on-warning --testdox 2>&1 | tee ci-logs/phpunit.log
+        # Re-audit 19.11.2026 (CI P0): the call moodle-plugin-ci makes - vendor/bin/phpunit with the testsuite of the
+        # component, from the Moodle root - plus a JUnit log, which the evidence step below reads.
+        run: |
+          set -o pipefail
+          cd moodle
+          vendor/bin/phpunit --testsuite adaptivequizcatmodel_catquiz_testsuite --testdox --fail-on-warning \
+            --log-junit "$GITHUB_WORKSPACE/ci-logs/junit.xml" 2>&1 | tee "$GITHUB_WORKSPACE/ci-logs/phpunit.log"
 
-      # Optional heavy job (adapter #6, audit 18.10.): only on a manual run with longrun = true, on PostgreSQL.
-      # A skip is no green: the step fails unless the long run really ran and passed.
-      - name: Long run with feedback (160 items, 512 MiB)
-        if: ${{ github.event.inputs.longrun == 'true' && matrix.database == 'pgsql' }}
+      # Optional heavy job (adapter #6, audit 18.10.; re-audit 19.11.2026, long run P0): only on a manual run with
+      # longrun = true, in one PostgreSQL cell. One person with 250 items - a pool with single-choice, true/false,
+      # numerical and short-answer questions, a request that dies after the answer in the middle, question usage and
+      # progress compared slot by slot, the stored bytes, a second finalisation - and twelve people at the same time
+      # with 150 items each, in processes of their own. A skip is no green: the step fails unless both tests ran
+      # and passed. The figures (JSON), the JUnit log and the RSS of the process (GNU time) are kept as evidence.
+      - name: Long run with feedback (250 items; 12 people x 150 items at once)
+        if: ${{ github.event.inputs.longrun == 'true' && matrix.database == 'pgsql' && matrix.php == '8.3' }}
         env:
           CATQUIZ_LONGRUN: '1'
           CATQUIZ_LONGRUN_FEEDBACK: '1'
+          CATQUIZ_LONGRUN_ITEMS: '250'
+          CATQUIZ_LONGRUN_PARALLEL: '12'
+          CATQUIZ_LONGRUN_PARALLEL_ITEMS: '150'
+          CATQUIZ_REQUIRE_CONCURRENCY: '1'
           CATQUIZ_LONGRUN_OUT: ${{ github.workspace }}/ci-logs/longrun.json
         run: |
           set -o pipefail
           cd moodle
-          vendor/bin/phpunit --filter test_long_attempt_is_traced_request_by_request \
+          timer=""
+          [ -x /usr/bin/time ] && timer="/usr/bin/time -v"
+          $timer vendor/bin/phpunit --group longrun --testdox --log-junit ../ci-logs/longrun-junit.xml \
             mod/adaptivequiz/catmodel/catquiz/tests/longrun_test.php 2>&1 | tee ../ci-logs/longrun.log
-          grep -q 'OK (1 test' ../ci-logs/longrun.log || { echo '::error::The long run did not run or did not pass.'; exit 1; }
+          grep -q 'OK (2 tests' ../ci-logs/longrun.log || { echo '::error::The long run did not run or did not pass.'; exit 1; }
+          {
+            echo "## Long run (adapter, re-audit 19.11.2026)"
+            echo
+            grep -E 'Maximum resident set size|Elapsed \(wall clock\)' ../ci-logs/longrun.log | sed 's/^\s*/- /' || true
+            echo
+            echo '```'
+            cat ../ci-logs/longrun.json.txt 2>/dev/null || true
+            echo '```'
+            echo
+            echo 'Twelve people: `longrun-parallel.json` in the artefact.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload long run evidence
+        if: ${{ always() && github.event.inputs.longrun == 'true' && matrix.database == 'pgsql' && matrix.php == '8.3' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidence-longrun-${{ matrix.php }}-${{ matrix.database }}
+          path: |
+            ci-logs/longrun*
+          retention-days: 90
+          if-no-files-found: warn
+
+      # Re-audit 19.11.2026 (CI P0): which commits of engine, host and adapter ran together, on which Moodle, PHP
+      # and database, how many tests and assertions, what was skipped - and the tests the issues name ran, passed
+      # and were not skipped (the job fails otherwise). Also in the job summary.
+      - name: Evidence (commits, versions, tests)
+        if: ${{ always() }}
+        env:
+          CI_EVIDENCE_SELF: adaptivequizcatmodel_catquiz
+        run: >-
+          python3 plugin/.github/scripts/ci_evidence.py
+          --title "PHPUnit / MOODLE_405_STABLE / PHP ${{ matrix.php }} / ${{ matrix.database }}"
+          --moodle moodle --db ${{ matrix.database }}
+          --component adaptivequizcatmodel_catquiz=plugin
+          --component mod_adaptivequiz=moodle-plugin-ci-plugins/moodle-mod_adaptivequiz
+          --component local_catquiz=moodle-plugin-ci-plugins/moodle-local_catquiz
+          --junit ci-logs/junit.xml --required plugin/.github/ci-required-tests.txt
+          --out ci-logs/evidence
+
+      - name: Upload evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: evidence-phpunit-MOODLE_405_STABLE-${{ matrix.php }}-${{ matrix.database }}
+          path: |
+            ci-logs/evidence
+            ci-logs/junit.xml
+          retention-days: 90
+          if-no-files-found: warn
 
       - name: Collect error summary
         if: ${{ always() }}

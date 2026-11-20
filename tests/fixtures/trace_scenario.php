@@ -110,6 +110,56 @@ final class trace_scenario {
     }
 
     /**
+     * Gives part of the pool other question types: twins of single-choice items as true/false, numerical and short
+     * answer questions, with the same scale and the same item parameters (re-audit 19.11.2026, long run).
+     *
+     * Every $every-th item of the pool gets one twin; the types take turns. The twin sits in the category of its
+     * original, so it belongs to the same pool.
+     *
+     * @param int $every
+     * @param string[] $types Question types with a test helper of the core: truefalse, numerical, shortanswer.
+     * @return array Twins made, by type.
+     */
+    public function add_other_question_types(int $every = 2, array $types = ['truefalse', 'numerical', 'shortanswer']): array {
+        global $DB;
+        $helpers = ['truefalse' => 'true', 'numerical' => 'pi', 'shortanswer' => 'frogtoad'];
+        $questions = \testing_util::get_data_generator()->get_plugin_generator('core_question');
+        $made = array_fill_keys($types, 0);
+        $n = 0;
+        foreach ($DB->get_records('local_catquiz_items', ['componentname' => 'question'], 'id') as $item) {
+            if ($n++ % $every !== 0 || empty($item->activeparamid)) {
+                continue;
+            }
+            $type = $types[intdiv($n - 1, $every) % count($types)];
+            $categoryid = (int) $DB->get_field_sql(
+                'SELECT qbe.questioncategoryid
+                   FROM {question_bank_entries} qbe
+                   JOIN {question_versions} qv ON qv.questionbankentryid = qbe.id
+                  WHERE qv.questionid = ?',
+                [$item->componentid]
+            );
+            $twin = $questions->create_question($type, $helpers[$type], [
+                'category' => $categoryid, 'name' => 'Twin ' . $item->componentid . ' ' . $type,
+            ]);
+            $param = $DB->get_record('local_catquiz_itemparams', ['id' => $item->activeparamid], '*', MUST_EXIST);
+            $newitem = clone $item;
+            unset($newitem->id);
+            $newitem->componentid = (int) $twin->id;
+            $newitem->activeparamid = null;
+            $newitem->id = $DB->insert_record('local_catquiz_items', $newitem);
+            $newparam = clone $param;
+            unset($newparam->id);
+            $newparam->itemid = $newitem->id;
+            $newparam->componentid = (int) $twin->id;
+            $newparamid = $DB->insert_record('local_catquiz_itemparams', $newparam);
+            $DB->set_field('local_catquiz_items', 'activeparamid', $newparamid, ['id' => $newitem->id]);
+            $made[$type]++;
+        }
+        \cache_helper::purge_all();
+        return $made;
+    }
+
+    /**
      * Forgets the host's timing and the CATquiz timeline: the next request begins.
      */
     public static function begin_request(): void {
