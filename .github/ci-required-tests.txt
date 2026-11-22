@@ -6,4 +6,5 @@ two_attempts_one_session_test        # engine #146 DoD3
 link_functions_calibrated_test       # host #25
 result_provider_information_test     # host #25
 scale_set_complete_replay_test       # engine #172, #174, host #23
+global_scale_running_estimate_test   # engine #174 AK9/DoD7
 trace_test                           # host #17
