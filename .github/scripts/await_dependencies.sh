@@ -12,8 +12,12 @@
 #            <component> <checkout dir> <branch> <pinned ref or ""> [<component> <dir> <branch> <pinned> ...]
 #   A checkout needs its .git directory (call this before .git is removed).
 #   A pinned ref (manual run) is taken as given: if it is too old, the job fails at once.
-#   Components the version.php does not name are not checked.
+#   Components neither the version.php nor the partner file names are not checked.
 # Environment (for the self-test): AWAIT_TRIES (default 30), AWAIT_SLEEP seconds (default 30) - 15 minutes.
+#   AWAIT_PARTNERS=<file>: lines "<component> <version>" (# starts a comment). The versions of the other plugins this
+#   state was delivered and tested with (re-audit of 22.11.2026): a run waits for them as for a dependency, so that the
+#   evidence of the run names the commits of one delivery, not the partner states of the previous one. The file is
+#   for the CI only; what an installation requires stays in version.php. A pinned ref is not held to it.
 set -euo pipefail
 
 versionfile=$1
@@ -44,6 +48,16 @@ read_version() {
     ' "$1" "$2"
 }
 
+# The version a partner file names for a component, 0 when it names none.
+partner_version() {
+    [ -n "${AWAIT_PARTNERS:-}" ] || { echo 0; return; }
+    if [ ! -f "$AWAIT_PARTNERS" ]; then
+        echo "::error::AWAIT_PARTNERS: keine Datei unter $AWAIT_PARTNERS" >&2
+        exit 3
+    fi
+    awk -v c="$1" '{ sub(/#.*/, "") } $1 == c && $2 ~ /^[0-9]+$/ { v = $2 } END { print v + 0 }' "$AWAIT_PARTNERS"
+}
+
 args=("$@")
 attempt=1
 while :; do
@@ -51,6 +65,11 @@ while :; do
     for ((i = 0; i < ${#args[@]}; i += 4)); do
         component=${args[i]} dir=${args[i+1]} branch=${args[i+2]} pinned=${args[i+3]}
         need=$(read_version "$component" "$versionfile")
+        # A state chosen for the run (manual run) is taken as chosen: only version.php applies to it.
+        if [ -z "$pinned" ]; then
+            partner=$(partner_version "$component")
+            [ "$partner" -gt "$need" ] && need=$partner
+        fi
         [ "$need" -eq 0 ] && continue
         have=$(read_version version "$dir/version.php")
         sha=$(git -C "$dir" rev-parse --short HEAD 2>/dev/null || echo '?')

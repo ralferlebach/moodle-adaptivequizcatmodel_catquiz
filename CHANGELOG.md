@@ -1,5 +1,20 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111709
+
+Re-Audit vom 22.11.2026. Setzt weiter mod_adaptivequiz 2026111703 voraus; geprüft mit local_catquiz 1.2 2026111713 (Nachweise
+dort in `doc/re-audit-2026-11-22-nacharbeit.md`).
+
+- **Engine #174 – die Globalskala über alle sechs Strategien:** `global_scale_running_estimate_test` spielt jetzt
+  FASTEST, ALLSUBS, LOWESTSUB, HIGHESTSUB, RELSUBS und CLASSIC, jede auf zwei Skalenstrukturen: Items nur auf den
+  Blattskalen, und gemischt (die Blätter der ersten Subskala geben ihre Items an die Subskala selbst ab). Nach jeder
+  Antwort gilt wie bisher: endliche, bewegte Wurzelschätzung, volles N, positive SE; am Ende ist die Ergebniszeile der
+  letzte Zustand.
+- **CI – ein Lauf, eine Auslieferung:** `.github/ci-partner-versions.txt` nennt die Stände von local_catquiz und Host,
+  mit denen diese Version geprüft wurde. Der Lauf wartet darauf (`await_dependencies.sh`, `AWAIT_PARTNERS`), jetzt auch
+  auf local_catquiz. `.github/scripts/await_host_version.sh`, das seit dem Wechsel auf `await_dependencies.sh` nicht mehr
+  benutzt wurde, ist entfernt.
+
 ## Interne Version 2026111708
 
 Re-Audit vom 20.11.2026. Setzt weiter mod_adaptivequiz 2026111701 voraus; läuft mit local_catquiz 1.2 2026111711 (Nachweise dort in
