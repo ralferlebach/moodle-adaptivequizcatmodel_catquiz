@@ -1,5 +1,24 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026111709
+
+Re-Audit vom 20.11.2026. Setzt weiter mod_adaptivequiz 2026111703 voraus; läuft mit local_catquiz 1.3 2026111712 (Nachweise dort in
+`doc/re-audit-2026-11-20-nachweise.md`).
+
+- **Engine #174 AK9/DoD7 – die Globalskala wird mit jeder Antwort geschätzt:** neuer Test
+  `tests/global_scale_running_estimate_test.php`, durch Host, Adapter, Engine und Fragennutzung, mit den beiden
+  Produktionslängen (LOWESTSUB 13, RELSUBS 17). Die Items liegen nur auf Enkelskalen. Nach jeder Antwort, vor der
+  Finalisierung, gilt:
+  - die Frage gehört zu einer Unter- oder Enkelskala;
+  - N der Wurzel ist die Zahl der Antworten;
+  - die Schätzung der Wurzel ist endlich und hat sich bewegt;
+  - die SE der Wurzel ist endlich und positiv.
+
+  Am Ende ist die Ergebniszeile der Wurzel der letzte Zustand (Fähigkeit, N, SE), ohne `global_scale_not_estimated`.
+  Zahntest: Ohne Schätzung der Wurzel ist der Test rot.
+- Pflichtliste der CI: 8 Tests (neu `global_scale_running_estimate_test`).
+- `version.php` 2026111709.
+
 ## Interne Version 2026111708
 
 Re-Audit 19.11.2026, Issues, CI und Lasttests. Setzt weiter mod_adaptivequiz 2026111703 voraus; läuft mit local_catquiz
