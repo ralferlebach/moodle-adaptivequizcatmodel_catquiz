@@ -50,15 +50,63 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
 #[\PHPUnit\Framework\Attributes\CoversNothing]
 final class global_scale_running_estimate_test extends advanced_testcase {
     /**
-     * The two production lengths of engine #174.
+     * The six strategies (re-audit of 22.11.2026) on two scale structures: the two production lengths of engine #174
+     * (lowest skill gap with 13, relevant subscales with 17 questions), all subscales with 24 (it covers every one of the
+     * 21 scales), every other strategy with 15, all on items of the leaf scales only; and on a mixed structure, in which
+     * the leaf scales of the first subscale give every second item to the subscale itself - items on two levels below
+     * the global scale, no scale left without items.
      *
      * @return array
      */
     public static function lengths(): array {
         return [
-            'lowest skill gap, 13 questions' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 13, '1101101101101101'],
-            'relevant subscales, 17 questions' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS, 17, '10011010101111110111'],
+            'lowest skill gap, 13 questions' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 13, '1101101101101101', 'leaves'],
+            'relevant subscales, 17 questions' => [LOCAL_CATQUIZ_STRATEGY_RELSUBS, 17, '10011010101111110111', 'leaves'],
+            'fastest, 15 questions' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, 15, '101101001101101', 'leaves'],
+            'all subscales, 24 questions' => [LOCAL_CATQUIZ_STRATEGY_ALLSUBS, 24, '110100110101101101100110', 'leaves'],
+            'highest skill gap, 15 questions' => [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB, 15, '011011010110110', 'leaves'],
+            'classic, 15 questions' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15, '100110110100111', 'leaves'],
+            'lowest skill gap, 13 questions, mixed levels' => [LOCAL_CATQUIZ_STRATEGY_LOWESTSUB, 13, '1101101101101101', 'mixed'],
+            'relevant subscales, 17 questions, mixed levels' =>
+                [LOCAL_CATQUIZ_STRATEGY_RELSUBS, 17, '10011010101111110111', 'mixed'],
+            'fastest, 15 questions, mixed levels' => [LOCAL_CATQUIZ_STRATEGY_FASTEST, 15, '101101001101101', 'mixed'],
+            'all subscales, 24 questions, mixed levels' =>
+                [LOCAL_CATQUIZ_STRATEGY_ALLSUBS, 24, '110100110101101101100110', 'mixed'],
+            'highest skill gap, 15 questions, mixed levels' =>
+                [LOCAL_CATQUIZ_STRATEGY_HIGHESTSUB, 15, '011011010110110', 'mixed'],
+            'classic, 15 questions, mixed levels' => [LOCAL_CATQUIZ_STRATEGY_CLASSIC, 15, '100110110100111', 'mixed'],
         ];
+    }
+
+    /**
+     * The mixed structure: every second item of the leaf scales below the first subscale moves to the subscale itself.
+     *
+     * @param int $rootid
+     * @return int The subscale that now has items of its own.
+     */
+    private function lift_items_of_the_first_subscale(int $rootid): int {
+        global $DB;
+        $subscales = $DB->get_records('local_catquiz_catscales', ['parentid' => $rootid], 'name ASC', 'id', 0, 1);
+        $subscale = (int) reset($subscales)->id;
+        $leaves = array_keys($DB->get_records('local_catquiz_catscales', ['parentid' => $subscale], '', 'id'));
+        $this->assertNotEmpty($leaves, 'The first subscale has leaf scales.');
+        [$insql, $params] = $DB->get_in_or_equal($leaves);
+        $items = $DB->get_records_select('local_catquiz_items', "catscaleid $insql", $params, 'catscaleid, id', 'id, catscaleid');
+        $moved = 0;
+        $index = [];
+        foreach ($items as $item) {
+            $index[$item->catscaleid] = ($index[$item->catscaleid] ?? 0) + 1;
+            if ($index[$item->catscaleid] % 2 === 0) {
+                $DB->set_field('local_catquiz_items', 'catscaleid', $subscale, ['id' => $item->id]);
+                $moved++;
+            }
+        }
+        $this->assertGreaterThan(0, $moved, 'Items lifted.');
+        foreach ($leaves as $leaf) {
+            $this->assertTrue($DB->record_exists('local_catquiz_items', ['catscaleid' => $leaf]), 'No leaf left without items.');
+        }
+        purge_all_caches();
+        return $subscale;
     }
 
     /**
@@ -67,9 +115,15 @@ final class global_scale_running_estimate_test extends advanced_testcase {
      * @param int $strategy
      * @param int $length
      * @param string $answers One character per question: 1 right, 0 wrong.
+     * @param string $structure 'leaves' or 'mixed' (lengths()).
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('lengths')]
-    public function test_the_global_scale_is_estimated_with_every_answer(int $strategy, int $length, string $answers): void {
+    public function test_the_global_scale_is_estimated_with_every_answer(
+        int $strategy,
+        int $length,
+        string $answers,
+        string $structure
+    ): void {
         global $DB;
         $this->resetAfterTest();
         $this->setAdminUser();
@@ -84,6 +138,9 @@ final class global_scale_running_estimate_test extends advanced_testcase {
         $DB->set_field('adaptivequiz', 'minimumquestions', 0, ['id' => $scenario->adaptivequiz->id]);
         $scenario->adaptivequiz->minimumquestions = 0;
         $rootid = (int) $DB->get_field('local_catquiz_catscales', 'id', ['parentid' => 0], MUST_EXIST);
+        if ($structure === 'mixed') {
+            $this->lift_items_of_the_first_subscale($rootid);
+        }
         $descendants = array_map('intval', catscale::get_subscale_ids($rootid));
         $this->assertNotEmpty($descendants);
         $this->setUser($scenario->userid);

@@ -47,5 +47,23 @@ expect "nicht genannte Komponente wird nicht geprueft" 0 "" env AWAIT_TRIES=1 ba
     unnamed "$work/missing" line ""
 expect "ANY_VERSION wird nicht abgewartet" 0 "" env AWAIT_TRIES=1 bash "$script" "$work/version.php" \
     other "$work/missing" line ""
+# Re-audit of 22.11.2026: the partner file names newer states than version.php requires.
+printf '# partner states of this delivery\nhost 21  # comment\nadapter 31\nunused 99\n' > "$work/partners.txt"
+origin host2 20; origin adapter2 30
+clone host2; clone adapter2
+expect "Partnerdatei verlangt neueren Host, kein Push -> rot" 1 "verlangt ist 21" env AWAIT_TRIES=2 \
+    AWAIT_PARTNERS="$work/partners.txt" bash "$script" "$work/version.php" host "$work/host2" line "" \
+    adapter "$work/adapter2" line ""
+( sleep 2; bump host2 21; bump adapter2 31 ) &
+expect "Partner kommen waehrend des Wartens -> gruen" 0 "adapter 31 @" env AWAIT_TRIES=10 \
+    AWAIT_PARTNERS="$work/partners.txt" bash "$script" "$work/version.php" host "$work/host2" line "" \
+    adapter "$work/adapter2" line ""
+wait
+expect "ohne Partnerdatei gilt nur version.php" 0 "host 21 @" env AWAIT_TRIES=1 bash "$script" "$work/version.php" \
+    host "$work/host2" line ""
+expect "festgelegter Stand: Partnerdatei gilt nicht, nur version.php" 0 "host 20 @" env AWAIT_TRIES=1 \
+    AWAIT_PARTNERS="$work/partners.txt" bash "$script" "$work/version.php" host "$work/host" line "abc123"
+expect "Partnerdatei fehlt -> Aufruffehler" 3 "keine Datei" env AWAIT_TRIES=1 AWAIT_PARTNERS="$work/missing.txt" \
+    bash "$script" "$work/version.php" host "$work/host2" line ""
 expect "falsche Argumentzahl -> Aufruffehler" 2 "groups of" bash "$script" "$work/version.php" host "$work/host" line
 exit $fails
