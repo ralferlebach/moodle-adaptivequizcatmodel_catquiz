@@ -24,8 +24,6 @@
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers ::adaptivequizcatmodel_catquiz_attempts_report_url
- * @covers ::adaptivequizcatmodel_catquiz_attempt_time_limit
  */
 
 namespace adaptivequizcatmodel_catquiz;
@@ -39,6 +37,8 @@ use stdClass;
  * Tests the callbacks exposed in lib.php.
  *
  * @package    adaptivequizcatmodel_catquiz
+ * @covers ::adaptivequizcatmodel_catquiz_attempts_report_url
+ * @covers ::adaptivequizcatmodel_catquiz_attempt_time_limit
  */
 final class lib_test extends advanced_testcase {
     /**

@@ -48,7 +48,6 @@ require_once($CFG->dirroot . '/local/catquiz/lib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @coversNothing
  */
-#[\PHPUnit\Framework\Attributes\CoversNothing]
 final class global_scale_running_estimate_test extends advanced_testcase {
     /**
      * The six strategies (re-audit of 22.11.2026) on two scale structures: the two production lengths of engine #174

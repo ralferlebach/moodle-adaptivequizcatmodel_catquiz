@@ -1,5 +1,18 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026112300
+
+CI-Werkzeugwechsel vom 23.11.2026 (moodle-plugin-ci 4.5.12: phpcs 4.0.4, moodle-cs 3.9.2). Setzt weiter mod_adaptivequiz
+2026111703 voraus; geprüft mit local_catquiz 1.2 2026112300 und mod_adaptivequiz 2026112300.
+
+- **Sprachdatei:** `highestlevel` und `highestlevel_help` in der Sortierfolge (moodle-cs `LangFilesOrdering`); dieselben
+  14 Strings, nur die Reihenfolge.
+- **Abdeckungsangaben:** In vier Testdateien stand `@covers` im Datei-Docblock vor `namespace`; PHPUnit 9 liest es
+  dort nicht, die Angabe war wirkungslos (moodle-cs `TestCaseCovers`). Jetzt im Klassen-Docblock. In
+  `global_scale_running_estimate_test` steht `@coversNothing` nur noch als Annotation, ohne das Attribut, das PHPUnit 9
+  nicht auswertet.
+- `ci-partner-versions.txt` nennt local_catquiz und Host 2026112300.
+
 ## Interne Version 2026111709
 
 Re-Audit vom 22.11.2026. Setzt weiter mod_adaptivequiz 2026111703 voraus; geprüft mit local_catquiz 1.2 2026111713 (Nachweise

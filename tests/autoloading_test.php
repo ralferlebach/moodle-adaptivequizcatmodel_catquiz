@@ -27,7 +27,6 @@
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
 
 namespace adaptivequizcatmodel_catquiz;
@@ -40,6 +39,7 @@ use RecursiveIteratorIterator;
  * Tests that the namespace of every class matches its location.
  *
  * @package    adaptivequizcatmodel_catquiz
+ * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
 final class autoloading_test extends advanced_testcase {
     /**

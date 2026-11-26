@@ -31,7 +31,6 @@
  * @package    adaptivequizcatmodel_catquiz
  * @copyright  2026 Wunderbyte GmbH <info@wunderbyte.at>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
 
 namespace adaptivequizcatmodel_catquiz\local\catmodel\itemadministration;
@@ -48,6 +47,7 @@ use stdClass;
  * Tests the slot reuse of the item administration.
  *
  * @package    adaptivequizcatmodel_catquiz
+ * @covers \adaptivequizcatmodel_catquiz\local\catmodel\itemadministration\catquiz_item_administration
  */
 final class catquiz_item_administration_slot_reuse_test extends advanced_testcase {
     /**

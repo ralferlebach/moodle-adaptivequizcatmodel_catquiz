@@ -1,5 +1,5 @@
-# The states of the other plugins this state of adaptivequizcatmodel_catquiz (ALiSe-v-1.2.0-legacy) was delivered and tested with (re-audit of 22.11.2026).
+# The states of the other plugins this state of adaptivequizcatmodel_catquiz (ALiSe-v-1.2.0-legacy) was delivered and tested with (CI tool update of 23.11.2026).
 # The CI waits for them (await_dependencies.sh, AWAIT_PARTNERS) as for a dependency, so that a run names the commits
 # of one delivery. For the CI only: what an installation requires is in version.php. Raise with every delivery.
-local_catquiz 2026111713
-mod_adaptivequiz 2026111706
+local_catquiz 2026112300
+mod_adaptivequiz 2026112300
