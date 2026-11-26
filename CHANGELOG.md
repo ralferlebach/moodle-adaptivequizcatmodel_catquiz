@@ -1,5 +1,14 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026112301
+
+CI-Werkzeugwechsel vom 23.11.2026 (moodle-plugin-ci 4.5.12: phpcs 4.0.4, moodle-cs 3.9.2). Setzt weiter mod_adaptivequiz
+2026111703 voraus; geprüft mit local_catquiz 1.3 2026112301 und mod_adaptivequiz 2026112301.
+
+- **Sprachdatei:** `highestlevel` und `highestlevel_help` in der Sortierfolge (moodle-cs `LangFilesOrdering`); dieselben
+  14 Strings, nur die Reihenfolge.
+- `ci-partner-versions.txt` nennt local_catquiz und Host 2026112301.
+
 ## Interne Version 2026111710
 
 Re-Audit vom 22.11.2026. Setzt weiter mod_adaptivequiz 2026111703 voraus; geprüft mit local_catquiz 1.3 2026111714 (Nachweise
