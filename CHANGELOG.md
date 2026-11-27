@@ -1,5 +1,20 @@
 # Changelog – adaptivequizcatmodel_catquiz
 
+## Interne Version 2026112700
+
+local_catquiz #177 (lineare Schreiblast). Setzt weiter mod_adaptivequiz 2026111703 voraus; geprüft mit local_catquiz
+1.2 2026112700 und mod_adaptivequiz 2026112300. local_catquiz verlangt diese Version des Adapters.
+
+- **Aufräumen:** `attempt_cleanup` löscht die Ereignisse des Arbeitsstands (`local_catquiz_progress_steps`) im selben
+  Schritt wie den Kopf. Bei einer Engine ohne die Tabelle wird der Schritt übersprungen.
+- **Waisen-Inventur:** neue Klasse `progress_steps_orphan` (Ereignisse ohne Kopf); die Tabellengrößen enthalten die
+  Ereignistabelle.
+- **Tests:**
+  - Aufräumen und Inventur mit Ereignissen;
+  - die Löschkette nummeriert die Ereignisse mit dem CAT-Versuch um;
+  - `two_attempts_one_session_test` und `longrun_test` lesen den Arbeitsstand über `progress::stored_structure()`.
+- `ci-partner-versions.txt` nennt local_catquiz 2026112700.
+
 ## Interne Version 2026112300
 
 CI-Werkzeugwechsel vom 23.11.2026 (moodle-plugin-ci 4.5.12: phpcs 4.0.4, moodle-cs 3.9.2). Setzt weiter mod_adaptivequiz

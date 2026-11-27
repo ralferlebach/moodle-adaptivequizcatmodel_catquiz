@@ -76,6 +76,12 @@ final class orphan_inventory {
                 [],
                 'Names the CAT attempt of somebody else: the two id spaces met.',
             ],
+            'progress_steps_orphan' => [
+                'local_catquiz_progress_steps', 's', 'timecreated',
+                "NOT EXISTS (SELECT 1 FROM {local_catquiz_progress} p WHERE p.attemptid = s.catattemptid)",
+                [],
+                'An event of a working state whose head is gone (local_catquiz #177 keeps both together).',
+            ],
             'cat_attempt_no_host_instance' => [
                 'local_catquiz_attempts', 'c', 'timecreated',
                 "c.component $compsql AND c.attemptid IS NOT NULL
@@ -146,8 +152,10 @@ final class orphan_inventory {
         global $DB;
         $sizes = [];
         foreach (
-            ['local_catquiz_progress', 'local_catquiz_attempts', 'local_catquiz_personparams', 'local_catquiz_trace',
-                'adaptivequiz_attempt'] as $table
+            [
+                'local_catquiz_progress', 'local_catquiz_progress_steps', 'local_catquiz_attempts', 'local_catquiz_personparams',
+                'local_catquiz_trace', 'adaptivequiz_attempt',
+            ] as $table
         ) {
             if ($DB->get_manager()->table_exists($table)) {
                 $sizes[$table] = $DB->count_records($table);

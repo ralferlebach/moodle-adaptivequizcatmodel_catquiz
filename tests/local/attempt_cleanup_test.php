@@ -103,6 +103,12 @@ final class attempt_cleanup_test extends advanced_testcase {
             'attemptid' => $catid, 'userid' => $s['user']->id, 'component' => 'mod_adaptivequiz',
             'json' => '{}', 'timemodified' => time(),
         ]);
+        if ($DB->get_manager()->table_exists('local_catquiz_progress_steps')) {
+            // Local_catquiz #177: the events of the working state go with their head.
+            $DB->insert_record('local_catquiz_progress_steps', (object) [
+                'catattemptid' => $catid, 'seq' => 1, 'eventtype' => 'shown', 'timecreated' => time(),
+            ]);
+        }
         $DB->insert_record('local_catquiz_personparams', (object) [
             'attemptid' => $catid, 'userid' => $s['user']->id, 'catscaleid' => 1, 'contextid' => 1, 'ability' => 0.5,
             'isprimary' => 1, 'isvalid' => 1, 'timecreated' => time(), 'timemodified' => time(),
@@ -127,6 +133,10 @@ final class attempt_cleanup_test extends advanced_testcase {
         $this->assertSame($exists, $DB->record_exists('local_catquiz_attempts', ['id' => $s['catid']]), "$name attempt $what");
         $progress = $DB->record_exists('local_catquiz_progress', ['attemptid' => $s['catid']]);
         $this->assertSame($exists, $progress, "$name progress $what");
+        if ($DB->get_manager()->table_exists('local_catquiz_progress_steps')) {
+            $events = $DB->record_exists('local_catquiz_progress_steps', ['catattemptid' => $s['catid']]);
+            $this->assertSame($exists, $events, "$name events of the working state $what");
+        }
         $this->assertSame(
             $exists,
             $DB->record_exists('local_catquiz_personparams', ['attemptid' => $s['catid']]),

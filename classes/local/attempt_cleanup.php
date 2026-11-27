@@ -190,6 +190,10 @@ final class attempt_cleanup {
             self::step('personparams');
             $DB->delete_records_select('local_catquiz_personparams', "attemptid $insql", $inparams);
             self::step('progress');
+            if ($DB->get_manager()->table_exists('local_catquiz_progress_steps')) {
+                // The events of the working state, from local_catquiz #177 on: with their head, in the same step.
+                $DB->delete_records_select('local_catquiz_progress_steps', "catattemptid $insql", $inparams);
+            }
             $DB->delete_records_select('local_catquiz_progress', "attemptid $insql", $inparams);
             self::step('attempts');
             $DB->delete_records_select('local_catquiz_attempts', "id $insql", $inparams);
