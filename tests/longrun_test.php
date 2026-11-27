@@ -136,7 +136,11 @@ final class longrun_test extends advanced_testcase {
             $types[$question->get_type_name()] = ($types[$question->get_type_name()] ?? 0) + 1;
         }
         $progressjson = (string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $cat->id]);
-        $progress = json_decode($progressjson, true) ?: [];
+        // Local_catquiz #177 stores played questions and responses as events: read as stored, in either format.
+        $progress = method_exists(\local_catquiz\teststrategy\progress::class, 'stored_structure')
+            ? json_decode(json_encode(\local_catquiz\teststrategy\progress::stored_structure((int) $cat->id, $progressjson)), true)
+            : json_decode($progressjson, true);
+        $progress = $progress ?: [];
         $played = array_map('intval', array_keys((array) ($progress['playedquestions'] ?? [])));
         $answered = array_map('intval', array_keys((array) ($progress['responses'] ?? [])));
         return [

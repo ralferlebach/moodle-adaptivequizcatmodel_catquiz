@@ -95,6 +95,16 @@ final class orphan_inventory_test extends advanced_testcase {
         $DB->insert_record('local_catquiz_personparams', (object) ['attemptid' => 990005, 'userid' => $user->id,
             'catscaleid' => 1, 'contextid' => 1, 'isprimary' => 1, 'isvalid' => 1, 'timecreated' => $days(365),
             'timemodified' => 0]);
+        // Local_catquiz #177: events of a working state - one with its head (healthy), two whose head is gone: 20 and
+        // 250 days. Only where the version of local_catquiz has the table.
+        $hassteps = $DB->get_manager()->table_exists('local_catquiz_progress_steps');
+        if ($hassteps) {
+            foreach ([[$healthycat, 1, $days(1)], [990007, 1, $days(20)], [990007, 2, $days(250)]] as [$owner, $seq, $time]) {
+                $DB->insert_record('local_catquiz_progress_steps', (object) [
+                    'catattemptid' => $owner, 'seq' => $seq, 'eventtype' => 'shown', 'timecreated' => $time,
+                ]);
+            }
+        }
         // A trace of an attempt that is gone: 3 days.
         $DB->insert_record('local_catquiz_trace', (object) ['adaptiveattemptid' => 990006, 'userid' => $user->id,
             'kind' => 'first_item', 'timecreated' => $days(3)]);
@@ -109,12 +119,16 @@ final class orphan_inventory_test extends advanced_testcase {
             'progress_orphan_hostid' => [2, 1, 0, 0, 1],
             'progress_orphan_none' => [1, 0, 1, 0, 0],
             'progress_foreign' => [1, 0, 0, 1, 0],
+            'progress_steps_orphan' => [2, 1, 0, 1, 0],
             'cat_attempt_no_host_instance' => [1, 1, 0, 0, 0],
             'cat_attempt_no_host_noinstance' => [1, 0, 0, 0, 1],
             'cat_attempt_no_hostid' => [1, 0, 1, 0, 0],
             'personparams_orphan' => [1, 0, 0, 1, 0],
             'trace_orphan' => [1, 1, 0, 0, 0],
         ];
+        if (!$hassteps) {
+            unset($expected['progress_steps_orphan']);
+        }
         foreach ($expected as $class => [$total, $le30, $le180, $le365, $older]) {
             $this->assertSame(
                 ['total' => $total, 'le30' => $le30, 'le180' => $le180, 'le365' => $le365, 'older' => $older],

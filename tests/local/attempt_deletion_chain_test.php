@@ -282,6 +282,10 @@ final class attempt_deletion_chain_test extends advanced_testcase {
         global $DB;
         $DB->execute('UPDATE {local_catquiz_attempts} SET id = ? WHERE id = ?', [$to, $from]);
         $DB->execute('UPDATE {local_catquiz_progress} SET attemptid = ? WHERE attemptid = ?', [$to, $from]);
+        if ($DB->get_manager()->table_exists('local_catquiz_progress_steps')) {
+            // Local_catquiz #177: the events of the working state belong to the CAT attempt as well.
+            $DB->execute('UPDATE {local_catquiz_progress_steps} SET catattemptid = ? WHERE catattemptid = ?', [$to, $from]);
+        }
         $DB->execute('UPDATE {local_catquiz_personparams} SET attemptid = ? WHERE attemptid = ?', [$to, $from]);
     }
 

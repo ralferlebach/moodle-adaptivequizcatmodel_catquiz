@@ -112,7 +112,11 @@ final class two_attempts_one_session_test extends advanced_testcase {
         $catattempt = $DB->get_record('local_catquiz_attempts', ['attemptid' => $attempt->id], '*', MUST_EXIST);
         $quba = question_engine::load_questions_usage_by_activity((int) $attempt->uniqueid);
         $usage = array_map(fn($slot) => (int) $quba->get_question($slot)->id, $quba->get_slots());
-        $progress = json_decode((string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattempt->id]), true);
+        $json = (string) $DB->get_field('local_catquiz_progress', 'json', ['attemptid' => $catattempt->id]);
+        // Local_catquiz #177 stores played questions and responses as events: read as stored, in either format.
+        $progress = method_exists(\local_catquiz\teststrategy\progress::class, 'stored_structure')
+            ? json_decode(json_encode(\local_catquiz\teststrategy\progress::stored_structure((int) $catattempt->id, $json)), true)
+            : json_decode($json, true);
         $played = array_map('intval', array_keys((array) $progress['playedquestions']));
         $answered = array_map('intval', array_keys((array) $progress['responses']));
         return ['attempt' => $attempt, 'cat' => $catattempt, 'usage' => $usage, 'played' => $played, 'answered' => $answered];
